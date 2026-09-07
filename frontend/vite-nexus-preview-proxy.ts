@@ -10,10 +10,12 @@ import { URL } from 'node:url';
 export function nexusPreviewProxyPlugin(
   modulePrefix: string,
   target = 'http://127.0.0.1:3092',
+  flowTarget = 'http://127.0.0.1:3091',
 ): Plugin {
   const prefix = modulePrefix.replace(/\/$/, '');
   const mounts = [`${prefix}/nexus-api`, '/nexus-api'];
   const targetBase = target.replace(/\/$/, '');
+  const flowBase = flowTarget.replace(/\/$/, '');
 
   const attach = (middlewares: Connect.Server) => {
     middlewares.use((req, res, next) => {
@@ -31,7 +33,9 @@ export function nexusPreviewProxyPlugin(
       try {
         // No usar new URL(absolutePath, base): un path que empieza con "/"
         // reemplaza todo el pathname del target (pierde /nexus-api).
-        dest = new URL(`${targetBase}${rest}${qs}`);
+        // /api/flow vive en nexus-admin (:3091); auth/verify en nexus-api (:3092)
+        const destBase = rest.startsWith('/api/flow') ? flowBase : targetBase;
+        dest = new URL(`${destBase}${rest}${qs}`);
       } catch {
         res.statusCode = 502;
         res.end('Bad Gateway');
@@ -46,7 +50,14 @@ export function nexusPreviewProxyPlugin(
         dest,
         { method: req.method, headers },
         (proxyRes) => {
-          res.writeHead(proxyRes.statusCode ?? 502, proxyRes.headers);
+          const headers = { ...proxyRes.headers };
+          if (pathname.includes('/access/verify')) {
+            headers['cache-control'] = 'no-store, no-cache, must-revalidate';
+            headers['pragma'] = 'no-cache';
+            delete headers['etag'];
+            delete headers['last-modified'];
+          }
+          res.writeHead(proxyRes.statusCode ?? 502, headers);
           proxyRes.pipe(res);
         },
       );

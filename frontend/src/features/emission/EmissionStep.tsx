@@ -257,8 +257,8 @@ export function EmissionStep() {
       prefix: string,
       tipoDoc: string,
       identificacion: string,
+      _current: PersonFormPatch,
       setPerson: (patch: PersonFormPatch) => void,
-      _current?: PersonFormPatch,
     ) => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 1) return;
@@ -397,16 +397,19 @@ export function EmissionStep() {
   const runFuneralCedulaAuto = useCallback(
     async (
       prefix: string,
-      _tipoDoc: string,
+      tipoDoc: string,
       identificacion: string,
+      current: PersonFormPatch,
+      setPerson: (patch: PersonFormPatch) => void,
     ): Promise<boolean> => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 6) return true;
       const ok = await checkFuneralCedula(prefix, identificacion);
       if (!ok) return false;
+      await lookupByCedula(prefix, tipoDoc || 'V', identificacion, current, setPerson);
       return true;
     },
-    [checkFuneralCedula],
+    [checkFuneralCedula, lookupByCedula],
   );
 
   useEffect(() => {
@@ -414,17 +417,29 @@ export function EmissionStep() {
     const digits = String(tomador.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto('tom_', tomador.tipoDoc ?? 'V', tomador.identificacion);
+      void runFuneralCedulaAuto(
+        'tom_',
+        tomador.tipoDoc ?? 'V',
+        tomador.identificacion,
+        tomador,
+        setTomador,
+      );
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [checkFuneralFlow, tomador.identificacion, tomador.tipoDoc, runFuneralCedulaAuto]);
+  }, [checkFuneralFlow, tomador.identificacion, tomador.tipoDoc, runFuneralCedulaAuto, setTomador]);
 
   useEffect(() => {
     if (!checkFuneralFlow || sameInsured) return;
     const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto('aseg_', asegurado.tipoDoc ?? 'V', asegurado.identificacion);
+      void runFuneralCedulaAuto(
+        'aseg_',
+        asegurado.tipoDoc ?? 'V',
+        asegurado.identificacion,
+        asegurado,
+        setAsegurado,
+      );
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
@@ -433,6 +448,7 @@ export function EmissionStep() {
     asegurado.identificacion,
     asegurado.tipoDoc,
     runFuneralCedulaAuto,
+    setAsegurado,
   ]);
 
   const validate = async () => {
@@ -635,11 +651,11 @@ export function EmissionStep() {
           onIdentificacionBlur={
             isRcvEmision
               ? (id) => {
-                  void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, setPerson, person);
+                  void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
               : checkFuneralFlow
                 ? (id) => {
-                    void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id);
+                    void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
                 : undefined
           }

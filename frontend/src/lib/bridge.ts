@@ -33,6 +33,7 @@ import {
   extractActorMetadataFromBridgeData,
   rememberMarketplaceActorFromToken,
 } from './sso-metadata';
+import { persistFlowHandoff } from './flow-handoff';
 
 // ── Configuración por puerto (dev local) o hostname (HTTPS sslip.io) ───────
 const PORT_TO_ORDER: Record<string, number> = {
@@ -105,8 +106,14 @@ function getModuleTokenKey(): string {
   return PORT_TO_TOKEN_KEY[window.location.port ?? ''] ?? 'nexus_access_token';
 }
 
-const bridgeHost = () =>
-  resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
+/** Flow (session/save/done) usa /nexus-api de Apache → admin :3091.
+ *  No usar /formulario/nexus-api (eso es verify en :3092 y no tiene /api/flow). */
+const bridgeHost = () => {
+  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
+    return `${window.location.origin}/nexus-api`;
+  }
+  return resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
+};
 const QUERY_KEY   = 'sid';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -245,7 +252,9 @@ function makeBridge(): BridgeAPI {
     // Solo OCR (order=1) persiste documents; otros módulos tienen slots idle que
     // sobrescribirían el expediente procesado en la sesión del flujo.
     if (order !== 1) delete out.documents;
-    return enrichBridgePayloadForSave(out, getModuleTokenKey());
+    const payload = enrichBridgePayloadForSave(out, getModuleTokenKey());
+    persistFlowHandoff(payload);
+    return payload;
   };
 
   // Campos cuyo valor NO debe sobrescribirse durante la hidratación.
@@ -365,6 +374,27 @@ function makeBridge(): BridgeAPI {
       return out ?? { finished: true };
     } catch (e) {
       console.warn('[bridge] advance failed', e);
+      if (order === 2) {
+        const emisionBase = (
+          (import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined)?.replace(/\/$/, '')
+          || '/emision'
+        );
+        const params = new URLSearchParams();
+        if (sid) params.set('sid', sid);
+        const token =
+          getNexusTokenFromUrl()
+          || (typeof sessionStorage !== 'undefined'
+            ? sessionStorage.getItem(getModuleTokenKey())
+            : null);
+        if (token) params.set('nexus_token', token);
+        try {
+          const product = sessionStorage.getItem('exelixi_product') || 'rcv';
+          params.set('product', product);
+        } catch {
+          params.set('product', 'rcv');
+        }
+        window.location.href = `${emisionBase}/?${params.toString()}`;
+      }
       return { finished: true };
     }
   };
