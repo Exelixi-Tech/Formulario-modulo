@@ -19,6 +19,7 @@ import { mergeMarketplaceActorMetadata, rememberMarketplaceActorFromToken } from
 applyExelixiBranding('Formulario');
 
 rememberMarketplaceActorFromToken(getNexusTokenFromUrl());
+
 applyMetadataFromNexusToken('nexus_access_token_formulario', (metadata) => {
   const store = useWizardStore.getState();
   store.setMetadataCanal(
