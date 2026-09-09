@@ -186,6 +186,13 @@ function defaultDoc(status: DocumentState['status'] = 'done'): DocumentState {
   return { status, progress: status === 'done' ? 100 : 0 };
 }
 
+/** Handoff OCR con activación tarjeta — no confundir con metadataCanal SSO del RCV normal. */
+function isTarjetaOcrHandoff(handoff: ExelixiOcrHandoff): boolean {
+  if (handoff.tarjeta) return true;
+  const meta = handoff.metadataCanal;
+  return meta != null && String(meta.flujo ?? '').trim().toLowerCase() === 'tarjeta';
+}
+
 function metadataFromTarjetaHandoff(
   tarjeta: NonNullable<ExelixiOcrHandoff['tarjeta']>,
 ): Record<string, unknown> {
@@ -330,7 +337,7 @@ export function applyExelixiOcrHandoff(
 
   applyFuneralOcrCedulas();
 
-  if (handoff.metadataCanal || handoff.tarjeta) {
+  if (isTarjetaOcrHandoff(handoff)) {
     const fromTarjeta = handoff.tarjeta ? metadataFromTarjetaHandoff(handoff.tarjeta) : {};
     const meta = {
       ...(handoff.metadataCanal || {}),
