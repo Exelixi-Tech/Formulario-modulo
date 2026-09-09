@@ -5,6 +5,36 @@ import { persistFlowHandoff } from './flow-handoff';
 export const TARJETA_FLOW_HEADER = 'X-Rcv-Tarjeta-Flow';
 
 const TARJETA_SESSION_KEY = 'rcv_tarjeta_public_flow';
+const TARJETA_METADATA_KEY = 'rcv_tarjeta_metadata_canal';
+
+export function persistTarjetaMetadataCanal(meta: Record<string, unknown>): void {
+  try {
+    sessionStorage.setItem(TARJETA_METADATA_KEY, JSON.stringify(meta));
+  } catch {
+    /* ignore */
+  }
+}
+
+export function readTarjetaMetadataCanal(): Record<string, unknown> | null {
+  try {
+    const raw = sessionStorage.getItem(TARJETA_METADATA_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as unknown;
+    return parsed && typeof parsed === 'object' && !Array.isArray(parsed)
+      ? (parsed as Record<string, unknown>)
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+export function hydrateTarjetaMetadataCanal(): void {
+  if (!shouldUseTarjetaPublicApi()) return;
+  const stored = readTarjetaMetadataCanal();
+  if (!stored?.cplan) return;
+  const store = useWizardStore.getState();
+  store.setMetadataCanal({ ...(store.metadataCanal || {}), ...stored });
+}
 
 export function isTarjetaRcvFlow(): boolean {
   try {
@@ -61,6 +91,8 @@ export function getEmisionContinueUrlForTarjeta(): string {
 
 /** Formulario → Emisión sin bridge (?sid=) ni nexus_token. */
 export function continueTarjetaToEmision(): void {
+  const meta = useWizardStore.getState().metadataCanal;
+  if (meta?.cplan) persistTarjetaMetadataCanal(meta as Record<string, unknown>);
   persistFlowHandoff(collectWizardSnapshot());
   markTarjetaPublicSession();
   window.location.href = getEmisionContinueUrlForTarjeta();
