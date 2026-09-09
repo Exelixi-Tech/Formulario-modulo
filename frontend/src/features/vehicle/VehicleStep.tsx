@@ -45,6 +45,7 @@ import {
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import type { VehicleData } from '../../types';
+import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 
 const COLOR_SWATCHES: Record<string, string> = {
   blanco: '#F8FAFC', negro: '#0F172A', gris: '#94A3B8', plateado: '#CBD5E1',
@@ -220,6 +221,7 @@ export function VehicleStep() {
   const exelixiFlow = isExelixiCatalogFlow();
   const cotizadorRcv = isCotizadorFlow();
   const rcvLaMundial = isRcvLaMundialFlow();
+  const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = rcvLaMundial && !cotizadorRcv;
   const conductorCiudades = useCiudades(conductor.cestado);
   const isBinacional = rcvLaMundial && vehicle.tipoPlaca === 'binacional';
@@ -724,7 +726,9 @@ export function VehicleStep() {
       if (req(vehicle.cmodelo)) e.modelo = 'Selecciona el modelo del catálogo';
       else if (req(vehicle.modelo)) e.modelo = 'El modelo es obligatorio';
       if (req(vehicle.cversion)) e.version = 'Debes seleccionar la versión exacta del vehículo';
-      else if (!vehicle.ccategoria_uso && req(vehicle.uso)) e.uso = 'Selecciona el uso del vehículo';
+      else if (!tarjetaFlow && !vehicle.ccategoria_uso && req(vehicle.uso)) {
+        e.uso = 'Selecciona el uso del vehículo';
+      }
       if (rcvLaMundial && showToneladas && (vehicle.ntoneladas == null || Number.isNaN(Number(vehicle.ntoneladas)))) {
         e.toneladas = 'Indica las toneladas totales (mín. 13 TM)';
       }
@@ -746,7 +750,9 @@ export function VehicleStep() {
     else if (req(vehicle.modelo)) e.modelo = 'El modelo es obligatorio';
 
     if (req(vehicle.cversion)) e.version = 'Debes seleccionar la versión exacta del vehículo';
-    else if (!vehicle.ccategoria_uso && req(vehicle.uso)) e.uso = 'Selecciona el uso del vehículo';
+    else if (!tarjetaFlow && !vehicle.ccategoria_uso && req(vehicle.uso)) {
+      e.uso = 'Selecciona el uso del vehículo';
+    }
 
     if (rcvLaMundial && showToneladas && (vehicle.ntoneladas == null || Number.isNaN(Number(vehicle.ntoneladas)))) {
       e.toneladas = 'Indica las toneladas totales (mín. 13 TM)';
@@ -1180,7 +1186,8 @@ export function VehicleStep() {
             </Field>
           )}
 
-          {/* Uso — categorías dinámicas según la versión seleccionada */}
+          {/* Uso — oculto en flujo tarjeta (plan FARMPA/FARMMO fija el tipo) */}
+          {!tarjetaFlow && (
           <Field
             anchor="veh-uso"
             error={errors.uso}
@@ -1258,8 +1265,9 @@ export function VehicleStep() {
               </Select>
             )}
           </Field>
+          )}
 
-          {rcvLaMundial && (
+          {rcvLaMundial && !tarjetaFlow && (
             <>
               <Field
                 label="Actividades asociadas (Recargo RCV) *"
