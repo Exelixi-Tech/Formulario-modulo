@@ -34,6 +34,7 @@ import {
   rememberMarketplaceActorFromToken,
 } from './sso-metadata';
 import { persistFlowHandoff } from './flow-handoff';
+import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-flow';
 
 // ── Configuración por puerto (dev local) o hostname (HTTPS sslip.io) ───────
 const PORT_TO_ORDER: Record<string, number> = {
@@ -369,6 +370,9 @@ function makeBridge(): BridgeAPI {
             target = url.toString();
           } catch { /* ignore */ }
         }
+        if (shouldUseTarjetaPublicApi()) {
+          target = withTarjetaFlowQuery(target);
+        }
         setTimeout(() => { window.location.href = target; }, 900);
       }
       return out ?? { finished: true };
@@ -393,7 +397,7 @@ function makeBridge(): BridgeAPI {
         } catch {
           params.set('product', 'rcv');
         }
-        window.location.href = `${emisionBase}/?${params.toString()}`;
+        window.location.href = withTarjetaFlowQuery(`${emisionBase}/?${params.toString()}`);
       }
       return { finished: true };
     }
