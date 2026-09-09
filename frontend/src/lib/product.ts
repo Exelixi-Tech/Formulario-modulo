@@ -26,6 +26,8 @@ export interface ProductConfig {
   exelixiCatalog?: boolean;
   builderProductId?: string;
   useFuneralStep?: boolean;
+  usesPatrimonialesStep?: boolean;
+  usesBienStep?: boolean;
   skipPersonasStep?: boolean;
 }
 
@@ -44,9 +46,25 @@ export const PRODUCTS: Record<ProductId, ProductConfig> = {
     cramo: 9,
     hasVehicle: false,
   },
+  patrimoniales: {
+    id: 'patrimoniales',
+    label: 'Patrimonial',
+    fullLabel: 'Seguro Patrimonial',
+    cramo: 0,
+    hasVehicle: false,
+    usesPatrimonialesStep: true,
+  },
+  bien: {
+    id: 'patrimoniales',
+    label: 'Patrimonial',
+    fullLabel: 'Seguro Patrimonial',
+    cramo: 0,
+    hasVehicle: false,
+    usesPatrimonialesStep: true,
+  },
 };
 
-const VALID_PRODUCTS: ProductId[] = ['rcv', 'funerario'];
+const VALID_PRODUCTS: ProductId[] = ['rcv', 'funerario', 'patrimoniales', 'bien'];
 const STORAGE_KEY = 'exelixi_product';
 
 export interface ProductDetectHints {
@@ -57,11 +75,15 @@ export interface ProductDetectHints {
 }
 
 /**
- * Detecta rcv|funerario y lo persiste en sessionStorage (Nexus verify / bridge).
+ * Detecta rcv|funerario|patrimoniales y lo persiste en sessionStorage (Nexus verify / bridge).
  * @param {ProductDetectHints} [hints]
  * @returns {ProductId | null}
  */
 export function persistProductFromHints(hints?: ProductDetectHints): ProductId | null {
+  if (hints?.product === 'patrimoniales' || hints?.product === 'patrimonial' || hints?.product === 'bien' || hints?.product === 'bienes') {
+    try { sessionStorage.setItem(STORAGE_KEY, 'patrimoniales'); } catch { /* ignore */ }
+    return 'patrimoniales';
+  }
   if (hints?.product === 'funerario') {
     try { sessionStorage.setItem(STORAGE_KEY, 'funerario'); } catch { /* ignore */ }
     return 'funerario';
@@ -73,6 +95,10 @@ export function persistProductFromHints(hints?: ProductDetectHints): ProductId |
   if (hints?.url) {
     try {
       const fromUrl = new URL(hints.url, window.location.origin).searchParams.get('product');
+      if (fromUrl === 'patrimoniales' || fromUrl === 'patrimonial' || fromUrl === 'bien' || fromUrl === 'bienes') {
+        sessionStorage.setItem(STORAGE_KEY, 'patrimoniales');
+        return 'patrimoniales';
+      }
       if (fromUrl === 'funerario' || fromUrl === 'rcv') {
         sessionStorage.setItem(STORAGE_KEY, fromUrl);
         return fromUrl as ProductId;
@@ -80,6 +106,10 @@ export function persistProductFromHints(hints?: ProductDetectHints): ProductId |
     } catch { /* ignore */ }
   }
   const label = `${hints?.nombre ?? ''} ${hints?.moduloNombre ?? ''}`.toLowerCase();
+  if (label.includes('patrimon') || label.includes('bien')) {
+    try { sessionStorage.setItem(STORAGE_KEY, 'patrimoniales'); } catch { /* ignore */ }
+    return 'patrimoniales';
+  }
   if (label.includes('funerar')) {
     try { sessionStorage.setItem(STORAGE_KEY, 'funerario'); } catch { /* ignore */ }
     return 'funerario';
@@ -135,6 +165,13 @@ export function usesFuneralStep(): boolean {
   return false;
 }
 
+export function usesPatrimonialesStep(): boolean {
+  const cfg = getProductConfig();
+  return cfg.id === 'patrimoniales' || cfg.id === 'bien' || Boolean(cfg.usesPatrimonialesStep) || Boolean(cfg.usesBienStep);
+}
+
+export const usesBienStep = usesPatrimonialesStep;
+
 export function usesVehicleStep(): boolean {
   return getProductConfig().hasVehicle;
 }
@@ -148,6 +185,13 @@ export function skipsPersonasStep(): boolean {
 export function isFunerario(): boolean {
   return getProductId() === 'funerario';
 }
+
+export function isPatrimoniales(): boolean {
+  const p = getProductId();
+  return p === 'patrimoniales' || p === 'bien';
+}
+
+export const isBien = isPatrimoniales;
 
 export function isRcv(): boolean {
   return getProductId() === 'rcv';
