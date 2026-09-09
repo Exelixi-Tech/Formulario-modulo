@@ -377,7 +377,7 @@ function makeBridge(): BridgeAPI {
       if (order === 2) {
         const emisionBase = (
           (import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined)?.replace(/\/$/, '')
-          || '/emision'
+          || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5183' : '/emision')
         );
         const params = new URLSearchParams();
         if (sid) params.set('sid', sid);
@@ -393,6 +393,13 @@ function makeBridge(): BridgeAPI {
         } catch {
           params.set('product', 'rcv');
         }
+        if (isExelixiCatalogFlow()) {
+          params.set('flow', 'exelixi-catalog');
+        }
+        if (isCotizadorFlow()) {
+          params.set('flow', 'cotizador');
+        }
+        params.set('wizardStep', '4');
         window.location.href = `${emisionBase}/?${params.toString()}`;
       }
       return { finished: true };
