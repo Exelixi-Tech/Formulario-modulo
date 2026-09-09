@@ -1,4 +1,4 @@
-﻿import { create } from 'zustand';
+import { create } from 'zustand';
 import type {
   WizardState,
   DocType,
@@ -8,6 +8,7 @@ import type {
   VehicleData,
   FuneralData,
   FuneralPerson,
+  PatrimonialesData,
   Plan,
   PaymentMethod,
   IssuedPolicy,
@@ -18,6 +19,12 @@ import { buildDiligenciaState, preClasificarDiligencia, type DiligenciaState } f
 import { getProductId } from '../lib/product';
 
 const defaultDoc = (): DocumentState => ({ status: 'idle', progress: 0 });
+
+const defaultPatrimoniales = (): PatrimonialesData => ({
+  datosBien: '',
+  tipo: '',
+  descripcion: '',
+});
 
 const defaultTomador = (): TomadorData => ({
   tipoDoc: 'V',
@@ -102,6 +109,7 @@ interface WizardActions {
   setConductor: (data: Partial<PersonData>) => void;
   setVehicle: (data: Partial<VehicleData>) => void;
   setFuneral: (data: Partial<FuneralData>) => void;
+  setPatrimoniales: (data: Partial<PatrimonialesData>) => void;
   setCategory: (c: string) => void;
   setSelectedPlan: (plan: Plan | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
@@ -129,6 +137,7 @@ const initialState: WizardState = {
   ocrDone: false,
   tomador: defaultTomador(),
   funeral: defaultFuneral(),
+  patrimoniales: defaultPatrimoniales(),
   sameInsured: true,
   asegurado: defaultPerson(),
   differentPayer: false,
@@ -216,6 +225,9 @@ export const useWizardStore = create<WizardState & WizardActions>()((set) => ({
 
   setFuneral: (data) =>
     set((s) => ({ funeral: { ...s.funeral, ...data } })),
+
+  setPatrimoniales: (data) =>
+    set((s) => ({ patrimoniales: { ...s.patrimoniales, ...data } })),
 
   setCategory: (category) => set({ category, selectedPlan: null }),
 

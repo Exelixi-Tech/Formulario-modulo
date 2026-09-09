@@ -113,6 +113,7 @@ router.get('/ocupaciones', async (_req, res) => {
     res.json({ ok: true, source: 'nest-api', items });
   } catch (err) {
     logError('ocupaciones', err);
+    console.log(err)
     res.status(502).json({ ok: false, error: 'No se pudo obtener profesiones/ocupaciones' });
   }
 });
