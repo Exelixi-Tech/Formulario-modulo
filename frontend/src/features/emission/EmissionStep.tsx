@@ -560,13 +560,23 @@ export function EmissionStep() {
     const digits = String(tomador.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'tom_',
-        tomador.tipoDoc ?? 'V',
-        tomador.identificacion,
-        tomador,
-        setTomador,
-      );
+      if (checkFuneralFlow) {
+        void runFuneralCedulaAuto(
+          'tom_',
+          tomador.tipoDoc ?? 'V',
+          tomador.identificacion,
+          tomador,
+          setTomador,
+        );
+      } else {
+        void lookupByCedula(
+          'tom_',
+          tomador.tipoDoc ?? 'V',
+          tomador.identificacion,
+          tomador,
+          setTomador,
+        );
+      }
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
@@ -579,17 +589,27 @@ export function EmissionStep() {
   ]);
 
   useEffect(() => {
-    if (!checkFuneralFlow || sameInsured) return;
+    if (sameInsured) return;
     const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'aseg_',
-        asegurado.tipoDoc ?? 'V',
-        asegurado.identificacion,
-        asegurado,
-        setAsegurado,
-      );
+      if (checkFuneralFlow) {
+        void runFuneralCedulaAuto(
+          'aseg_',
+          asegurado.tipoDoc ?? 'V',
+          asegurado.identificacion,
+          asegurado,
+          setAsegurado,
+        );
+      } else {
+        void lookupByCedula(
+          'aseg_',
+          asegurado.tipoDoc ?? 'V',
+          asegurado.identificacion,
+          asegurado,
+          setAsegurado,
+        );
+      }
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
@@ -598,6 +618,7 @@ export function EmissionStep() {
     asegurado.identificacion,
     asegurado.tipoDoc,
     runFuneralCedulaAuto,
+    lookupByCedula,
     setAsegurado,
   ]);
 
