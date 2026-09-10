@@ -399,19 +399,19 @@ export function EmissionStep() {
   const runFuneralCedulaAuto = useCallback(
     async (
       prefix: string,
-      tipoDoc: string,
+      _tipoDoc: string,
       identificacion: string,
-      current: PersonFormPatch,
-      setPerson: (patch: PersonFormPatch) => void,
+      _current: PersonFormPatch,
+      _setPerson: (patch: PersonFormPatch) => void,
     ): Promise<boolean> => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 6) return true;
       const ok = await checkFuneralCedula(prefix, identificacion);
       if (!ok) return false;
-      await lookupByCedula(prefix, tipoDoc || 'V', identificacion, current, setPerson);
+      // Funerario: no consultar /emissions/propietary (lookup de dueño de vehículo / RCV).
       return true;
     },
-    [checkFuneralCedula, lookupByCedula],
+    [checkFuneralCedula],
   );
 
   useEffect(() => {

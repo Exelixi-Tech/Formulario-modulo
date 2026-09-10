@@ -317,6 +317,8 @@ export function FuneralStep() {
   // ── Validación ──────────────────────────────────────────────────────────
   const validatePerson = (p: FuneralPerson, isTitular: boolean): PersonErrors => {
     const e: PersonErrors = {};
+    if (isTitular) return e;
+
     const req = (v?: string) => !(v ?? '').trim();
     const len = (v?: string) => (v ?? '').trim().length;
 
@@ -367,6 +369,7 @@ export function FuneralStep() {
   };
 
   const checkAseguradoCedula = useCallback(async (idx: number, identificacion: string) => {
+    if (idx === 0) return true;
     const digits = String(identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return true;
     if (lastAsegCedula.current[idx] === digits) {
@@ -400,10 +403,14 @@ export function FuneralStep() {
       );
       return true;
     } catch {
-      lastAsegCedula.current[idx] = '';
-      lastAsegOk.current[idx] = false;
-      toast.warning('No se pudo verificar la cédula', 'Inténtalo de nuevo antes de continuar.', 4000);
-      return false;
+      lastAsegCedula.current[idx] = digits;
+      lastAsegOk.current[idx] = true;
+      toast.warning(
+        'No se pudo verificar la cédula',
+        'Puedes continuar. Revisa la cédula si el sistema no respondió.',
+        4000,
+      );
+      return true;
     } finally {
       setCedulaChecking((s) => ({ ...s, [idx]: false }));
     }
@@ -429,10 +436,14 @@ export function FuneralStep() {
     setAsegErrors(aErr);
     setBenefErrors([]);
 
-    const hasPersonError = aErr.some((e) => Object.keys(e).length > 0);
-    if (hasPersonError) return false;
+    const firstErr = aErr.find((e) => Object.keys(e).length > 0);
+    if (firstErr) {
+      const msg = Object.values(firstErr)[0] || 'Revisa los datos del asegurado adicional.';
+      toast.warning('No se puede guardar', msg, 5000);
+      return false;
+    }
 
-    for (let i = 0; i < funeral.asegurados.length; i++) {
+    for (let i = 1; i < funeral.asegurados.length; i++) {
       const ok = await checkAseguradoCedula(i, funeral.asegurados[i].identificacion);
       if (!ok) return false;
     }
