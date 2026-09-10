@@ -75,7 +75,10 @@ export function resolveOcrPersonRoles(
     sameInsured = false;
     asegurado = {
       identificacion: titularCarnet?.identificacion ?? carnetId,
-      tipoDoc: titularCarnet?.tipoDoc ?? 'V',
+      tipoDoc:
+        titularCarnet?.tipoDoc
+        ?? inferTipoDocFromRaw(certificado.identificacion ?? certificado.propietarioIdentificacion)
+        ?? 'V',
       nombre: titularCarnet?.nombre ?? '',
       apellido: titularCarnet?.apellido ?? '',
       fechaNac: '',
