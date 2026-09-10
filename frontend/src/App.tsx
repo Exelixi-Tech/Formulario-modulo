@@ -98,6 +98,7 @@ const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario' | 'patrimoniales' | 'bien
   },
 };
 
+
 function getStepMeta(product: ReturnType<typeof getProductConfig>, localStep: 2 | 3): StepMeta {
   if (product.exelixiCatalog) {
     if (localStep === 2) {
@@ -197,10 +198,13 @@ export default function App() {
           '¡Formulario completado!',
           'Datos del cliente y beneficiarios guardados correctamente.',
         );
+        const snapshot = buildExelixiWizardSnapshot();
         if (product.exelixiCatalog) {
-          continueToEmisionModule(buildExelixiWizardSnapshot());
+          continueToEmisionModule(snapshot);
+        } else if (typeof window.__bridgeAdvance === 'function') {
+          void window.__bridgeAdvance(snapshot);
         } else {
-          window.__bridgeAdvance?.();
+          continueToEmisionModule(snapshot);
         }
         return;
       }
@@ -222,20 +226,24 @@ export default function App() {
             ? 'Datos del cliente y bien asegurado guardados correctamente.'
             : 'Datos del cliente y las personas guardados correctamente.',
       );
+      const snapshot = buildExelixiWizardSnapshot();
       if (product.exelixiCatalog) {
-        continueToEmisionModule(buildExelixiWizardSnapshot());
+        continueToEmisionModule(snapshot);
+      } else if (typeof window.__bridgeAdvance === 'function') {
+        void window.__bridgeAdvance(snapshot);
       } else {
-        window.__bridgeAdvance?.();
+        continueToEmisionModule(snapshot);
       }
     }
   }
 
+
   const meta = cotizadorRcv
     ? {
-        eyebrow: 'Paso 01 · Vehículo',
-        title: 'Datos del vehículo',
-        sub: 'Ingresa año, marca, modelo, versión y uso del vehículo para ver los planes RCV.',
-      }
+      eyebrow: 'Paso 01 · Vehículo',
+      title: 'Datos del vehículo',
+      sub: 'Ingresa año, marca, modelo, versión y uso del vehículo para ver los planes RCV.',
+    }
     : getStepMeta(product, localStep);
 
   return (
@@ -284,11 +292,10 @@ export default function App() {
                           persistProductFromHints({ product: p });
                           window.location.search = `?product=${p}${localStep === 3 ? '&step=3' : ''}`;
                         }}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${
-                          active
+                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${active
                             ? 'bg-[#0F1A5A] text-white shadow-sm'
                             : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                        }`}
+                          }`}
                         title={`Probar flujo ${labels[p]}`}
                       >
                         {labels[p]}

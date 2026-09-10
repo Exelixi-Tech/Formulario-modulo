@@ -26,14 +26,15 @@ import {
 import { canNavigateToStep, getDefaultRequiredDocs } from './wizard-navigation';
 import { getProductConfig } from './product';
 import { BUILDER_PRODUCT_STORAGE_KEY, isExelixiCatalogFlow, ensureExelixiFlowQueryParam } from './exelixi-catalog';
-import { ensureCotizadorFlowQueryParam, isCotizadorFlow } from './cotizador-flow';
 import { applyWizardStepFromUrl, defaultStepForModule, stepToModuleOrder } from './wizard-step';
+import { ensureCotizadorFlowQueryParam, isCotizadorFlow } from './cotizador-flow';
 import {
   enrichBridgePayloadForSave,
   extractActorMetadataFromBridgeData,
   rememberMarketplaceActorFromToken,
 } from './sso-metadata';
-import { persistFlowHandoff } from './flow-handoff';
+import { persistFlowHandoff, readFlowHandoff, encodeFlowHandoff } from './flow-handoff';
+import { mergeExelixiWizardHandoff } from './exelixi-wizard-handoff';
 
 // ── Configuración por puerto (dev local) o hostname (HTTPS sslip.io) ───────
 const PORT_TO_ORDER: Record<string, number> = {
@@ -123,7 +124,7 @@ function getSidFromUrl(): string | null {
   } catch { return null; }
 }
 
-function moduleOrder(): number | null {
+function moduleOrder(): number {
   const envOrder = import.meta.env.VITE_BRIDGE_MODULE_ORDER;
   if (envOrder) {
     const n = Number(envOrder);
@@ -138,7 +139,7 @@ function moduleOrder(): number | null {
   if (host.startsWith('emision.')) return 3;
   if (host.startsWith('pagos.')) return 4;
   const port = window.location.port || '';
-  return PORT_TO_ORDER[port] ?? null;
+  return PORT_TO_ORDER[port] ?? 2;
 }
 
 /**
@@ -228,7 +229,7 @@ function makeBridge(): BridgeAPI {
     }
     // Limpieza de datos fantasma y bloqueo de producto en la sesión backend
     const isCatalogFlow = isExelixiCatalogFlow();
-    const prod = sessionStorage.getItem('exelixi_product') || 'rcv';
+    const prod = sessionStorage.getItem('exelixi_product') || getProductConfig().id || 'rcv';
     if (!isCatalogFlow) {
       if (prod === 'funerario') {
         delete out.vehicle;
@@ -254,6 +255,7 @@ function makeBridge(): BridgeAPI {
     if (order !== 1) delete out.documents;
     const payload = enrichBridgePayloadForSave(out, getModuleTokenKey());
     persistFlowHandoff(payload);
+    mergeExelixiWizardHandoff(payload);
     return payload;
   };
 
@@ -286,70 +288,119 @@ function makeBridge(): BridgeAPI {
   };
 
   const hydrate = async () => {
-    if (!active || !sid) return;
-    try {
-      const r = await fetchJson<{ success: boolean; data: { data: Record<string, unknown> } }>(
-        `${bridgeHost()}/api/flow/session/${sid}`,
-      );
-      if (r?.data?.data) {
-        applyHydration(r.data.data);
-        // Solo guardar en sessionStorage si este módulo NO tiene su propio
-        // token en la URL — evita sobreescribir con el token de otro módulo
-        const urlToken = getNexusTokenFromUrl();
-        const sessionToken = r.data.data.nexus_token;
-        const moduleKey = getModuleTokenKey();
-        const stored = sessionStorage.getItem(moduleKey);
-        if (sessionToken && typeof sessionToken === 'string' && !stored) {
-          sessionStorage.setItem(moduleKey, sessionToken);
-        } else if (!stored && urlToken) {
-          sessionStorage.setItem(moduleKey, urlToken);
+    if (active && sid) {
+      try {
+        const r = await fetchJson<{ success: boolean; data: { data: Record<string, unknown> } }>(
+          `${bridgeHost()}/api/flow/session/${sid}`,
+        );
+        if (r?.data?.data) {
+          applyHydration(r.data.data);
+          const urlToken = getNexusTokenFromUrl();
+          const sessionToken = r.data.data.nexus_token;
+          const moduleKey = getModuleTokenKey();
+          const stored = sessionStorage.getItem(moduleKey);
+          if (sessionToken && typeof sessionToken === 'string' && !stored) {
+            sessionStorage.setItem(moduleKey, sessionToken);
+          } else if (!stored && urlToken) {
+            sessionStorage.setItem(moduleKey, urlToken);
+          }
+          const sessionProduct = r.data.data.product;
+          if (sessionProduct === 'rcv' || sessionProduct === 'funerario' || sessionProduct === 'patrimoniales' || sessionProduct === 'bien') {
+            try { sessionStorage.setItem('exelixi_product', String(sessionProduct)); } catch { /* ignore */ }
+          }
+          if (r.data.data.exelixiCatalogFlow) {
+            ensureExelixiFlowQueryParam(true);
+          }
+          if (r.data.data.cotizadorFlow) {
+            ensureCotizadorFlowQueryParam(true);
+          }
+          const builderProduct = r.data.data.builderProduct;
+          if (builderProduct && typeof builderProduct === 'object') {
+            try {
+              sessionStorage.setItem(BUILDER_PRODUCT_STORAGE_KEY, JSON.stringify(builderProduct));
+            } catch { /* ignore */ }
+          }
         }
-        // Propaga el producto (rcv | funerario) entre módulos: getProductConfig()
-        // lo lee desde sessionStorage, así no depende de que la URL lo arrastre.
-        const sessionProduct = r.data.data.product;
-        if (sessionProduct === 'rcv' || sessionProduct === 'funerario') {
-          try { sessionStorage.setItem('exelixi_product', sessionProduct); } catch { /* ignore */ }
-        }
-        if (r.data.data.exelixiCatalogFlow) {
-          ensureExelixiFlowQueryParam(true);
-        }
-        if (r.data.data.cotizadorFlow) {
-          ensureCotizadorFlowQueryParam(true);
-        }
-        const builderProduct = r.data.data.builderProduct;
-        if (builderProduct && typeof builderProduct === 'object') {
-          try {
-            sessionStorage.setItem(BUILDER_PRODUCT_STORAGE_KEY, JSON.stringify(builderProduct));
-          } catch { /* ignore */ }
-        }
+        console.info('[bridge] hydrated session', sid);
+      } catch (e) {
+        console.warn('[bridge] hydrate failed', e);
       }
-      // eslint-disable-next-line no-console
-      console.info('[bridge] hydrated session', sid);
-    } catch (e) {
-      // eslint-disable-next-line no-console
-      console.warn('[bridge] hydrate failed', e);
+    }
+
+    // Hidratación local desde snapshot de handoff
+    const local = readFlowHandoff();
+    if (local) {
+      applyHydration(local);
     }
   };
 
   const save = async (extra: Record<string, unknown> = {}) => {
+    const state = { ...collectState(), ...extra };
+    persistFlowHandoff(state);
+    mergeExelixiWizardHandoff(state);
     if (!active || !sid) return;
     try {
       await fetchJson(`${bridgeHost()}/api/flow/save/${sid}`, {
         method: 'POST',
-        body: JSON.stringify({ ...collectState(), ...extra }),
+        body: JSON.stringify(state),
       });
     } catch (e) { console.warn('[bridge] save failed', e); }
   };
 
+  const fallbackAdvanceToEmision = (extra: Record<string, unknown> = {}) => {
+    const state = { ...collectState(), ...extra };
+    persistFlowHandoff(state);
+    mergeExelixiWizardHandoff(state);
+
+    const emisionBase = (
+      (import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined)?.replace(/\/$/, '')
+      || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5183' : '/emision')
+    );
+    const params = new URLSearchParams();
+    if (sid) params.set('sid', sid);
+    const token =
+      getNexusTokenFromUrl()
+      || (typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem(getModuleTokenKey())
+        : null);
+    if (token) params.set('nexus_token', token);
+    const product = sessionStorage.getItem('exelixi_product') || getProductConfig().id || 'rcv';
+    params.set('product', product);
+    if (isExelixiCatalogFlow()) {
+      params.set('flow', 'exelixi-catalog');
+    }
+    if (isCotizadorFlow()) {
+      params.set('flow', 'cotizador');
+    }
+    params.set('wizardStep', '4');
+
+    const encoded = encodeFlowHandoff(state);
+    if (encoded) {
+      params.set('flow_handoff', encoded);
+    }
+
+    const targetUrl = `${emisionBase}/?${params.toString()}`;
+    setTimeout(() => {
+      window.location.href = targetUrl;
+    }, 600);
+  };
+
   const advance = async (extra: Record<string, unknown> = {}) => {
-    if (!active || !sid || !order) return { finished: true };
+    const currentState = { ...collectState(), ...extra };
+    persistFlowHandoff(currentState);
+    mergeExelixiWizardHandoff(currentState);
+
+    if (!active || !sid || !order) {
+      fallbackAdvanceToEmision(extra);
+      return { finished: true };
+    }
     try {
       const r = await fetchJson<{
         success: boolean;
         data: { finished: boolean; nextUrl?: string };
       }>(`${bridgeHost()}/api/flow/done/${sid}?from=${order}`, {
         method: 'POST',
-        body: JSON.stringify({ ...collectState(), ...extra }),
+        body: JSON.stringify(currentState),
       });
       const out = r?.data;
       if (out?.nextUrl) {
@@ -369,39 +420,14 @@ function makeBridge(): BridgeAPI {
             target = url.toString();
           } catch { /* ignore */ }
         }
-        setTimeout(() => { window.location.href = target; }, 900);
+        setTimeout(() => { window.location.href = target; }, 600);
+        return out;
       }
+      fallbackAdvanceToEmision(extra);
       return out ?? { finished: true };
     } catch (e) {
-      console.warn('[bridge] advance failed', e);
-      if (order === 2) {
-        const emisionBase = (
-          (import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined)?.replace(/\/$/, '')
-          || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5183' : '/emision')
-        );
-        const params = new URLSearchParams();
-        if (sid) params.set('sid', sid);
-        const token =
-          getNexusTokenFromUrl()
-          || (typeof sessionStorage !== 'undefined'
-            ? sessionStorage.getItem(getModuleTokenKey())
-            : null);
-        if (token) params.set('nexus_token', token);
-        try {
-          const product = sessionStorage.getItem('exelixi_product') || 'rcv';
-          params.set('product', product);
-        } catch {
-          params.set('product', 'rcv');
-        }
-        if (isExelixiCatalogFlow()) {
-          params.set('flow', 'exelixi-catalog');
-        }
-        if (isCotizadorFlow()) {
-          params.set('flow', 'cotizador');
-        }
-        params.set('wizardStep', '4');
-        window.location.href = `${emisionBase}/?${params.toString()}`;
-      }
+      console.warn('[bridge] advance failed, falling back to direct redirect', e);
+      fallbackAdvanceToEmision(extra);
       return { finished: true };
     }
   };
@@ -476,10 +502,16 @@ async function init() {
     if (nexusToken) {
       const autoSid = await tryAutoStart(nexusToken);
       if (autoSid) {
-        // Re-crear el bridge ahora que el sid está en la URL
         bridge = makeBridge();
       }
     }
+  }
+
+  // SIEMPRE exponer las funciones globales del bridge en window
+  if (typeof window !== 'undefined') {
+    window.__bridge = bridge;
+    window.__bridgeAdvance = (extra) => bridge.advance(extra ?? {}).then(() => undefined);
+    window.__bridgeNavigateStep = (targetStep) => bridge.navigateToStep(targetStep);
   }
 
   if (bridge.active && typeof window !== 'undefined') {
@@ -492,35 +524,30 @@ async function init() {
     });
 
     bridge.ready = hydratePromise;
-    window.__bridge        = bridge;
-    window.__bridgeAdvance = (extra) => bridge.advance(extra ?? {}).then(() => undefined);
-    window.__bridgeNavigateStep = (targetStep) => bridge.navigateToStep(targetStep);
 
-  // Auto-advance para módulos cuyo "fin" es un cambio de step en el store:
-  //   OCR (1):    step 1 → 2
-  //   Pagos (4):  step 5 → 6 (success)
-  // Para Formulario (2) y Emisión (3) el avance se dispara desde el App.tsx
-  // cuando el botón "Continuar" / "Confirmar plan" / "Guardar" tiene éxito.
-  let lastStep: number | undefined;
-  useWizardStore.subscribe((s: { step?: number }) => {
-    const step = s?.step;
-    if (typeof step !== 'number' || step === lastStep) return;
-    const prev = lastStep;
-    lastStep = step;
+    let lastStep: number | undefined;
+    useWizardStore.subscribe((s: { step?: number }) => {
+      const step = s?.step;
+      if (typeof step !== 'number' || step === lastStep) return;
+      const prev = lastStep;
+      lastStep = step;
 
-    // OCR completado: step pasó de 1 → 2
-    if (bridge.order === 1 && prev === 1 && step === 2) {
-      bridge.advance().catch(() => {});
-    }
-    // Pagos completado: step llegó a 6 (success)
-    if (bridge.order === 4 && step === 6) {
-      // No hay siguiente módulo; sólo registra el cierre del flujo.
-      bridge.advance().catch(() => {});
-    }
-  });
+      // OCR completado: step pasó de 1 → 2
+      if (bridge.order === 1 && prev === 1 && step === 2) {
+        bridge.advance().catch(() => {});
+      }
+      // Pagos completado: step llegó a 6 (success)
+      if (bridge.order === 4 && step === 6) {
+        bridge.advance().catch(() => {});
+      }
+    });
 
-    // eslint-disable-next-line no-console
     console.info('[bridge] active — sid=' + bridge.sid + ' order=' + bridge.order);
+  } else if (typeof window !== 'undefined') {
+    const local = readFlowHandoff();
+    if (local) {
+      bridge.hydrate().catch(() => {});
+    }
   }
 
   return bridge;
@@ -530,3 +557,4 @@ async function init() {
 // el auto-start se resuelva. El import './lib/bridge' sigue siendo suficiente.
 const bridgePromise = init();
 export default bridgePromise;
+
