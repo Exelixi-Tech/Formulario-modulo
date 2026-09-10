@@ -47,6 +47,7 @@ export function syncTitularFromTomador(): void {
         peso,
         estatura,
       },
+      ...funeral.asegurados.slice(1),
     ],
   });
 }
