@@ -682,6 +682,24 @@ export interface CheckCedulaPolizaResult {
   message?: string;
 }
 
+export interface FuneralPlanPer {
+  cplan: string;
+  xplan?: string;
+  parentescos?: Array<{
+    cparen: number;
+    xparentesco: string;
+    min_edad: number;
+    max_edad: number;
+  }>;
+}
+
+export async function fetchFuneralPlanes(cramo = 9): Promise<FuneralPlanPer[]> {
+  const { data } = await api.get<{ success: boolean; planes?: FuneralPlanPer[] }>(
+    `/personas/planes?cramo=${encodeURIComponent(String(cramo))}`,
+  );
+  return data.planes ?? [];
+}
+
 /** ¿Hay póliza funeraria vigente para esta cédula? (Sis2000 adpoliza). */
 export async function checkFuneralCedulaPoliza(
   identificacion: string,

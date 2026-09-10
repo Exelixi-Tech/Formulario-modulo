@@ -2,9 +2,25 @@
  * Funerario — consulta de póliza vigente por cédula (antes de avanzar).
  */
 const express = require('express');
-const { checkPolizaVigentePersonas } = require('../services/nestApiClient');
+const { checkPolizaVigentePersonas, getPlanesPersonas } = require('../services/nestApiClient');
 
 const router = express.Router();
+
+router.get('/planes', async (req, res) => {
+  const cramo = req.query.cramo != null ? Number(req.query.cramo) : 9;
+  try {
+    const planes = await getPlanesPersonas(cramo);
+    return res.json({ success: true, planes });
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    console.error('[personas/planes]', msg);
+    return res.status(err.status || 502).json({
+      success: false,
+      code: err.code || 'PERSONAS_PLANES_ERROR',
+      message: msg,
+    });
+  }
+});
 
 router.post('/poliza-vigente', async (req, res) => {
   const rif = String(req.body?.rif ?? req.body?.identificacion ?? '').replace(/\D/g, '');
