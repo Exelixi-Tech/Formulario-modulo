@@ -34,6 +34,7 @@ import {
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import type { FuneralPerson } from '../../types';
+import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 
 /** Años cumplidos desde YYYY-MM-DD (calendario, sin UTC). */
 function edadCumplida(iso?: string): number | null {
@@ -167,6 +168,7 @@ export function EmissionStep() {
 
   const catalogs = useCatalogs();
   const exelixiFlow = isExelixiCatalogFlow();
+  const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = isRcvLaMundialFlow() && !isCotizadorFlow();
   const producto = getProductId();
   const { config: formConfig } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -566,7 +568,7 @@ export function EmissionStep() {
       if (bens.length > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
-    } else if (hasBeneficiary) {
+    } else if (hasBeneficiary && !tarjetaFlow) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
 
@@ -992,7 +994,7 @@ export function EmissionStep() {
               </button>
             </div>
           </SectionCard>
-        ) : (
+        ) : !tarjetaFlow ? (
           <SectionCard
             Icon={Heart}
             title="Datos del Beneficiario Preferencial"
@@ -1004,7 +1006,7 @@ export function EmissionStep() {
             />
             {hasBeneficiary && renderPersonForm(beneficiario, setBeneficiario, 'benef_', beneficiarioCiudades, { secondaryIdent: true })}
           </SectionCard>
-        )}
+        ) : null}
       </div>
     </div>
   );

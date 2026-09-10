@@ -14,9 +14,15 @@ import { useWizardStore } from './store/wizardStore'
 import { isFunerario, isRcv, usesFuneralStep } from './lib/product'
 import { applyMetadataFromNexusToken, getNexusTokenFromUrl } from './lib/nexus-token-client'
 import { mergeMarketplaceActorMetadata, rememberMarketplaceActorFromToken } from './lib/sso-metadata'
+import { hydrateTarjetaMetadataCanal, isTarjetaRcvFlow, markTarjetaPublicSession } from './lib/rcv-tarjeta-flow'
 
 // Identidad Exélixi (colores + favicon) solo si el flujo activo es el catálogo.
 applyExelixiBranding('Formulario');
+
+if (isTarjetaRcvFlow()) {
+  markTarjetaPublicSession();
+  hydrateTarjetaMetadataCanal();
+}
 
 rememberMarketplaceActorFromToken(getNexusTokenFromUrl());
 

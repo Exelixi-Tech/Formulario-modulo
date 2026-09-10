@@ -34,6 +34,7 @@ import {
   rememberMarketplaceActorFromToken,
 } from './sso-metadata';
 import { persistFlowHandoff } from './flow-handoff';
+import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-flow';
 
 // ── Configuración por puerto (dev local) o hostname (HTTPS sslip.io) ───────
 const PORT_TO_ORDER: Record<string, number> = {
@@ -106,14 +107,9 @@ function getModuleTokenKey(): string {
   return PORT_TO_TOKEN_KEY[window.location.port ?? ''] ?? 'nexus_access_token';
 }
 
-/** Flow (session/save/done) usa /nexus-api de Apache → admin :3091.
- *  No usar /formulario/nexus-api (eso es verify en :3092 y no tiene /api/flow). */
-const bridgeHost = () => {
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    return `${window.location.origin}/nexus-api`;
-  }
-  return resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
-};
+/** Flow (session/save/done): misma base que NexusGuard (GCIA → nexus-api.exelixitech.com). */
+const bridgeHost = () =>
+  resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
 const QUERY_KEY   = 'sid';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -369,6 +365,9 @@ function makeBridge(): BridgeAPI {
             target = url.toString();
           } catch { /* ignore */ }
         }
+        if (shouldUseTarjetaPublicApi()) {
+          target = withTarjetaFlowQuery(target);
+        }
         setTimeout(() => { window.location.href = target; }, 900);
       }
       return out ?? { finished: true };
@@ -393,7 +392,7 @@ function makeBridge(): BridgeAPI {
         } catch {
           params.set('product', 'rcv');
         }
-        window.location.href = `${emisionBase}/?${params.toString()}`;
+        window.location.href = withTarjetaFlowQuery(`${emisionBase}/?${params.toString()}`);
       }
       return { finished: true };
     }

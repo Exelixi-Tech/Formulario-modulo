@@ -12,6 +12,8 @@ import { applyOcrPersonRoles } from './ocr-person-roles';
 import { applyFuneralOcrCedulas } from './funeral-ocr-apply';
 import { toDiligenciaDocTypes, type DiligenciaDocType } from './diligencia';
 import type { PersonData } from '../types';
+import { persistTarjetaMetadataCanal } from './rcv-tarjeta-flow';
+import { useWizardStore } from '../store/wizardStore';
 
 export type BuilderProductBranch =
   | 'AUTOMOVIL'
@@ -184,6 +186,37 @@ function defaultDoc(status: DocumentState['status'] = 'done'): DocumentState {
   return { status, progress: status === 'done' ? 100 : 0 };
 }
 
+/** Handoff OCR con activación tarjeta — no confundir con metadataCanal SSO del RCV normal. */
+function isTarjetaOcrHandoff(handoff: ExelixiOcrHandoff): boolean {
+  if (handoff.tarjeta) return true;
+  const meta = handoff.metadataCanal;
+  return meta != null && String(meta.flujo ?? '').trim().toLowerCase() === 'tarjeta';
+}
+
+function metadataFromTarjetaHandoff(
+  tarjeta: NonNullable<ExelixiOcrHandoff['tarjeta']>,
+): Record<string, unknown> {
+  const raw = tarjeta.raw || {};
+  return {
+    flujo: 'tarjeta',
+    skipPayment: tarjeta.bfactura === 1,
+    bfactura: tarjeta.bfactura,
+    xcodigo_unico: tarjeta.xcodigoUnico,
+    ctarjeta: tarjeta.ctarjeta,
+    cplan: tarjeta.cplan,
+    cramo: tarjeta.cramo,
+    ccanalalt: tarjeta.ccanalalt,
+    cproductor: tarjeta.cproductor,
+    cproducto: tarjeta.cproducto,
+    cmoneda: raw.cmoneda != null ? String(raw.cmoneda) : '$',
+    centidad: raw.centidad != null ? String(raw.centidad) : undefined,
+    citem: raw.citem != null ? Number(raw.citem) : tarjeta.ccanalalt,
+    nombre_producto:
+      tarjeta.nombreProducto
+      ?? (raw.nombre_producto != null ? String(raw.nombre_producto) : undefined),
+  };
+}
+
 export function applyExelixiOcrHandoff(
   setters: {
     setDocState: (doc: DocType, state: Partial<DocumentState>) => void;
@@ -304,6 +337,18 @@ export function applyExelixiOcrHandoff(
   }
 
   applyFuneralOcrCedulas();
+
+  if (isTarjetaOcrHandoff(handoff)) {
+    const fromTarjeta = handoff.tarjeta ? metadataFromTarjetaHandoff(handoff.tarjeta) : {};
+    const meta = {
+      ...(handoff.metadataCanal || {}),
+      ...fromTarjeta,
+      flujo: 'tarjeta',
+    };
+    const store = useWizardStore.getState();
+    store.setMetadataCanal({ ...(store.metadataCanal || {}), ...meta });
+    persistTarjetaMetadataCanal(meta);
+  }
 
   setters.setOcrDone(true);
   setters.goTo(2);
