@@ -1,6 +1,6 @@
 import type { PersonData } from '../types';
 import type { OcrFields } from './exelixi-handoff-types';
-import { extractTomadorFromCertificado } from './carnet-propietario';
+import { extractTomadorFromCertificado, resolveOwnerTipoDoc } from './carnet-propietario';
 
 function normalizeIdentificacionDigits(raw?: string | null): string {
   return String(raw ?? '').replace(/\D/g, '');
@@ -76,7 +76,8 @@ export function resolveOcrPersonRoles(
     asegurado = {
       identificacion: titularCarnet?.identificacion ?? carnetId,
       tipoDoc:
-        titularCarnet?.tipoDoc
+        resolveOwnerTipoDoc(certificado)
+        ?? titularCarnet?.tipoDoc
         ?? inferTipoDocFromRaw(certificado.identificacion ?? certificado.propietarioIdentificacion)
         ?? 'V',
       nombre: titularCarnet?.nombre ?? '',

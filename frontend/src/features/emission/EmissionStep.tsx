@@ -33,6 +33,10 @@ import {
   SECONDARY_IDENTIFICACION_MAX_LENGTH,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
+import {
+  rcvIdentityKeepFromOcr,
+  resolveRcvTitularTipoDocFromCert,
+} from '../../lib/rcv-titular-identity';
 import type { FuneralPerson } from '../../types';
 import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 
@@ -197,6 +201,15 @@ export function EmissionStep() {
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
+  const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
+
+  useEffect(() => {
+    if (!isRcvEmision || sameInsured !== false || !certOcr) return;
+    const expected = resolveRcvTitularTipoDocFromCert(certOcr);
+    if (asegurado.tipoDoc !== expected) {
+      setAsegurado({ tipoDoc: expected });
+    }
+  }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
 
   useEffect(() => {
     if (!checkFuneralFlow) return;
@@ -312,13 +325,11 @@ export function EmissionStep() {
               : store.beneficiario;
         const role = funeralRoleFromPrefix(prefix);
         const ocrIdentity = role ? funeralOcrIdentityPatch(role) : {};
-        // RCV: conservar clasificación y cédula del OCR/carnet al autofill Sis2000.
+        const documents = useWizardStore.getState().documents;
+        // RCV: carnet/cédula OCR mandan en tipoDoc — Sis2000 ipersona no debe pisar (ej. E en maclient).
         const rcvIdentityKeep =
           isRcvEmision && (prefix === 'aseg_' || prefix === 'tom_')
-            ? {
-                tipoDoc: latest.tipoDoc ?? 'V',
-                identificacion: latest.identificacion ?? digits,
-              }
+            ? rcvIdentityKeepFromOcr(prefix, latest, digits, documents)
             : {};
         // OCR manda en identidad; Sis2000 solo rellena huecos (teléfono, dirección…).
         const fill = sis2000EmptyFill({ ...latest, ...ocrIdentity }, patch);
