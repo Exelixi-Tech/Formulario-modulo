@@ -312,9 +312,17 @@ export function EmissionStep() {
               : store.beneficiario;
         const role = funeralRoleFromPrefix(prefix);
         const ocrIdentity = role ? funeralOcrIdentityPatch(role) : {};
+        // RCV: conservar clasificación y cédula del OCR/carnet al autofill Sis2000.
+        const rcvIdentityKeep =
+          isRcvEmision && (prefix === 'aseg_' || prefix === 'tom_')
+            ? {
+                tipoDoc: latest.tipoDoc ?? 'V',
+                identificacion: latest.identificacion ?? digits,
+              }
+            : {};
         // OCR manda en identidad; Sis2000 solo rellena huecos (teléfono, dirección…).
         const fill = sis2000EmptyFill({ ...latest, ...ocrIdentity }, patch);
-        setPerson({ ...fill, ...ocrIdentity });
+        setPerson({ ...fill, ...ocrIdentity, ...rcvIdentityKeep });
 
         const ocrFecha = String(ocrIdentity.fechaNac ?? '').slice(0, 10);
         const sisFecha = String(patch.fechaNac ?? '').slice(0, 10);

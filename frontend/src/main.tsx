@@ -74,12 +74,21 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
       });
 
       if (!handoffApplied && isRcv()) {
-        const latest = useWizardStore.getState().documents;
+        const store = useWizardStore.getState();
+        const titularFromCarnet = (store as { titularFromCarnet?: boolean }).titularFromCarnet;
+        const aseguradoId = String(store.asegurado?.identificacion ?? '').replace(/\D/g, '');
+        // Bridge/OCR ya resolvió tomador≠titular — no recalcular (pisaba tipoDoc con lógica vieja).
+        const rolesAlreadyHydrated =
+          titularFromCarnet === true
+          || (store.sameInsured === false && aseguradoId.length >= 6)
+          || (store.hasDriver && Boolean(store.conductor?.identificacion));
+
+        const latest = store.documents;
         const hasOcr =
           latest.cedula?.ocr
           || latest.licencia?.ocr
           || latest.certificado?.ocr;
-        if (hasOcr) {
+        if (hasOcr && !rolesAlreadyHydrated) {
           applyOcrPersonRolesFromDocuments(latest, {
             setSameInsured,
             setAsegurado,
