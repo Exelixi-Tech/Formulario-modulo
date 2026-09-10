@@ -5,7 +5,15 @@ import { IdentityInput } from '../../components/ui/IdentityInput';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { useCatalogs } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
-import { getProductId } from '../../lib/product';
+import { getProductConfig, getProductId } from '../../lib/product';
+import { fetchFuneralPlanes } from '../../lib/api';
+import {
+  additionalParentescos,
+  ageErrorForParentesco,
+  isTitularOnlyPlan,
+  unionAdditionalParentescos,
+  type PlanParentesco,
+} from '../../lib/funeralPlanParentescos';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
 import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
 import { formatTelefono, validateRequiredVePhone } from '../../lib/phone';
@@ -193,7 +201,7 @@ function PersonFields({
 }
 
 export function FuneralStep() {
-  const { tomador, asegurado, funeral, setFuneral, sameInsured } = useWizardStore();
+  const { tomador, asegurado, funeral, setFuneral, sameInsured, selectedPlan } = useWizardStore();
 
   const producto = getProductId();
   const { config } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -229,13 +237,36 @@ export function FuneralStep() {
   const [asegErrors, setAsegErrors] = useState<PersonErrors[]>([]);
   const [benefErrors, setBenefErrors] = useState<PersonErrors[]>([]);
   const [cedulaChecking, setCedulaChecking] = useState<Record<number, boolean>>({});
+  const [planParentescos, setPlanParentescos] = useState<PlanParentesco[]>([]);
   const lastAsegCedula = useRef<Record<number, string>>({});
   const lastAsegOk = useRef<Record<number, boolean>>({});
+  const productCfg = getProductConfig();
+  const titularOnly = isTitularOnlyPlan(selectedPlan?.parentescos ?? planParentescos);
 
-  const parentescoOptions =
+  useEffect(() => {
+    let cancelled = false;
+    fetchFuneralPlanes(productCfg.cramo || 9)
+      .then((planes) => {
+        if (cancelled) return;
+        const fromSelected = selectedPlan?.cplan
+          ? planes.find((p) => String(p.cplan) === String(selectedPlan.cplan))
+          : undefined;
+        const list = fromSelected?.parentescos?.length
+          ? additionalParentescos(fromSelected.parentescos)
+          : selectedPlan?.parentescos?.length
+            ? additionalParentescos(selectedPlan.parentescos)
+            : unionAdditionalParentescos(planes);
+        setPlanParentescos(list);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanParentescos(selectedPlan?.parentescos ?? []);
+      });
+    return () => { cancelled = true; };
+  }, [productCfg.cramo, selectedPlan?.cplan, selectedPlan?.parentescos]);
+
+  const catalogFallback =
     catalogs.parentescos.length > 0
       ? catalogs.parentescos
-          // El titular (código 1) se asigna automáticamente; no se ofrece aquí.
           .filter((p) => String(p.code) !== '1')
           .map((p) => ({ value: String(p.code), label: p.label }))
       : [
@@ -246,6 +277,10 @@ export function FuneralStep() {
           { value: '6', label: 'Padres' },
           { value: '7', label: 'Hermano (a)' },
         ];
+
+  const parentescoOptions = planParentescos.length
+    ? planParentescos.map((p) => ({ value: String(p.cparen), label: p.xparentesco }))
+    : catalogFallback;
 
   const sexoOptions = catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }));
 
@@ -312,6 +347,12 @@ export function FuneralStep() {
 
     if (req(p.sexo)) e.sexo = 'Selecciona el sexo';
     if (!isTitular && req(p.parentesco)) e.parentesco = 'Selecciona el parentesco';
+    const ageErr = ageErrorForParentesco(
+      p.fechaNac,
+      isTitular ? '1' : p.parentesco,
+      selectedPlan?.parentescos ?? planParentescos,
+    );
+    if (ageErr) e.fechaNac = ageErr;
 
     const phoneErr = validateRequiredVePhone(p.telefono);
     if (phoneErr) e.telefono = phoneErr;
@@ -456,13 +497,19 @@ export function FuneralStep() {
             </div>
           ))}
 
-          <button
-            type="button"
-            onClick={addAsegurado}
-            className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 text-sm font-bold hover:border-indigo-400 hover:bg-indigo-50/50 transition-all touch-manipulation"
-          >
-            <Plus size={15} /> Agregar asegurado
-          </button>
+          {titularOnly ? (
+            <p className="text-sm text-slate-500">
+              El plan elegido solo admite titular. No se pueden agregar asegurados adicionales.
+            </p>
+          ) : (
+            <button
+              type="button"
+              onClick={addAsegurado}
+              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 text-sm font-bold hover:border-indigo-400 hover:bg-indigo-50/50 transition-all touch-manipulation"
+            >
+              <Plus size={15} /> Agregar asegurado
+            </button>
+          )}
         </div>
       </SectionCard>
       )}

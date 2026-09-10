@@ -367,6 +367,28 @@ async function checkPolizaVigentePersonas({ rif, cramo } = {}) {
   };
 }
 
+/**
+ * Planes funerarios + parentescos (nest-api POST /personas/planes).
+ * @param {number} [cramo]
+ * @returns {Promise<Array>}
+ */
+async function getPlanesPersonas(cramo = 9) {
+  const url = `${getBaseUrl()}/api/v1/personas/planes`;
+  const response = await axios.post(
+    url,
+    { cramo: Number(cramo) || 9 },
+    await axiosOpts({ validateStatus: () => true }),
+  );
+  const body = response.data ?? {};
+  if (response.status >= 400 || body.status === false) {
+    const err = new Error(body?.message || `HTTP ${response.status} personas/planes`);
+    err.status = response.status;
+    err.code = body?.code || 'PERSONAS_PLANES_ERROR';
+    throw err;
+  }
+  return body.data?.planes ?? body.planes ?? [];
+}
+
 module.exports = {
   getBaseUrl,
   getTimeout,
@@ -375,6 +397,7 @@ module.exports = {
   validatePlacaViaNestApi,
   validateSerialViaNestApi,
   checkPolizaVigentePersonas,
+  getPlanesPersonas,
   getInmaAnios,
   getInmaMarcas,
   getInmaModelos,

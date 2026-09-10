@@ -123,13 +123,8 @@ export default function App() {
   const { hideStepper, hideFooterBar } = useUiFlags(config);
 
   useEffect(() => {
-    if (isFunerario() && step === 3) {
-      setLocalStep(2);
-      goTo(2);
-      return;
-    }
     if (step === 2 || step === 3) setLocalStep(step);
-  }, [step, goTo]);
+  }, [step]);
 
   function navigate(to: 2 | 3) {
     setLocalStep(to);
