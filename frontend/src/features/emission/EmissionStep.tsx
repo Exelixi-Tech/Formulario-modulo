@@ -33,6 +33,12 @@ import {
   SECONDARY_IDENTIFICACION_MAX_LENGTH,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
+import {
+  rcvIdentityKeepFromOcr,
+  resolveRcvOcrIdentDigits,
+  resolveRcvTitularTipoDocFromCert,
+  shouldRunRcvSis2000Lookup,
+} from '../../lib/rcv-titular-identity';
 import type { FuneralPerson } from '../../types';
 import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 
@@ -194,9 +200,20 @@ export function EmissionStep() {
   const lastFuneralCedula = useRef<Record<string, string>>({});
   const lastFuneralOk = useRef<Record<string, boolean>>({});
   const ocrForced = useRef<Record<string, string>>({});
+  /** true cuando el usuario editó la cédula a mano (no solo blur del OCR). */
+  const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
+  const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
+
+  useEffect(() => {
+    if (!isRcvEmision || sameInsured !== false || !certOcr) return;
+    const expected = resolveRcvTitularTipoDocFromCert(certOcr);
+    if (asegurado.tipoDoc !== expected) {
+      setAsegurado({ tipoDoc: expected });
+    }
+  }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
 
   useEffect(() => {
     if (!checkFuneralFlow) return;
@@ -312,13 +329,11 @@ export function EmissionStep() {
               : store.beneficiario;
         const role = funeralRoleFromPrefix(prefix);
         const ocrIdentity = role ? funeralOcrIdentityPatch(role) : {};
-        // RCV: conservar clasificación y cédula del OCR/carnet al autofill Sis2000.
+        const documents = useWizardStore.getState().documents;
+        // RCV: carnet/cédula OCR mandan en tipoDoc — Sis2000 ipersona no debe pisar (ej. E en maclient).
         const rcvIdentityKeep =
           isRcvEmision && (prefix === 'aseg_' || prefix === 'tom_')
-            ? {
-                tipoDoc: latest.tipoDoc ?? 'V',
-                identificacion: latest.identificacion ?? digits,
-              }
+            ? rcvIdentityKeepFromOcr(prefix, latest, digits, documents)
             : {};
         // OCR manda en identidad; Sis2000 solo rellena huecos (teléfono, dirección…).
         const fill = sis2000EmptyFill({ ...latest, ...ocrIdentity }, patch);
@@ -632,7 +647,17 @@ export function EmissionStep() {
         error={errors[`${prefix}identificacion`]}
         hint={
           isRcvEmision
-            ? 'Al salir del campo se buscan los datos en Sis2000'
+            ? (() => {
+                const ocrId = resolveRcvOcrIdentDigits(
+                  prefix,
+                  useWizardStore.getState().documents,
+                );
+                const cur = String(person.identificacion ?? '').replace(/\D/g, '');
+                if (ocrId && cur === ocrId && !manualIdentEdit.current[prefix]) {
+                  return 'Datos del OCR. Edite la cédula para buscar en Sis2000';
+                }
+                return 'Al salir del campo se buscan los datos en Sis2000';
+              })()
             : checkFuneralFlow
               ? lookupLoading[prefix]
                 ? 'Consultando Sis2000…'
@@ -656,11 +681,23 @@ export function EmissionStep() {
           onIdentificacionChange={(v) => {
             lastLookupCid.current[prefix] = '';
             lastFuneralCedula.current[prefix] = '';
+            manualIdentEdit.current[prefix] = true;
             setPerson({ identificacion: clipPersonField('identificacion', v) });
           }}
           onIdentificacionBlur={
             isRcvEmision
               ? (id) => {
+                  const docs = useWizardStore.getState().documents;
+                  const ocrIdent = resolveRcvOcrIdentDigits(prefix, docs);
+                  if (
+                    !shouldRunRcvSis2000Lookup(
+                      id,
+                      ocrIdent,
+                      Boolean(manualIdentEdit.current[prefix]),
+                    )
+                  ) {
+                    return;
+                  }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
               : checkFuneralFlow
