@@ -381,6 +381,8 @@ async function getPlanesPersonas(cramo = 9, canal = {}) {
   if (canal.cproducto) body.cproducto = String(canal.cproducto).trim();
   if (canal.cproductor) body.cproductor = String(canal.cproductor).trim();
   if (canal.cusuario) body.cusuario = String(canal.cusuario).trim();
+  if (canal.cgestor_in) body.cgestor_in = String(canal.cgestor_in).trim();
+  if (canal.cgestor) body.cgestor = String(canal.cgestor).trim();
   const response = await axios.post(
     url,
     body,
