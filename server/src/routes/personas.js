@@ -24,7 +24,10 @@ function funeralCanalFromReq(req) {
   const meta = { ...(payload.metadata || {}), ...(req.nexusMetadata || {}) };
   if (payload.canal && !meta.canal) meta.canal = payload.canal;
   const q = req.query || {};
-  const keys = ['centidad', 'citem', 'cgestor', 'cproducto', 'cproductor', 'ccanalalt', 'ccanalalt_in'];
+  const keys = [
+    'centidad', 'citem', 'cgestor', 'cproducto', 'cproductor', 'cusuario',
+    'ccanalalt', 'ccanalalt_in',
+  ];
   for (const key of keys) {
     if (q[key] != null && String(q[key]).trim() !== '') {
       meta[key] = String(q[key]).trim();

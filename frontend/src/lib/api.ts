@@ -708,11 +708,17 @@ export async function fetchFuneralPlanes(cramo = 9): Promise<FuneralPlanPer[]> {
   };
   for (const key of [
     'centidad', 'citem', 'cgestor', 'cgestor_in', 'cproducto', 'cproductor',
-    'ccanalalt', 'ccanalalt_in', 'cscanalalt', 'cscanalalt_in',
+    'cusuario', 'ccanalalt', 'ccanalalt_in', 'cscanalalt', 'cscanalalt_in',
   ]) {
     if (meta[key] != null && String(meta[key]).trim() !== '') {
       qs.set(key, String(meta[key]).trim());
     }
+  }
+  if (!qs.get('centidad') && meta.cproductor != null && String(meta.cproductor).trim() !== '') {
+    qs.set('centidad', 'P');
+  }
+  if (!qs.get('citem') && meta.cproductor != null && String(meta.cproductor).trim() !== '') {
+    qs.set('citem', String(meta.cproductor).trim());
   }
   const { data } = await api.get<{ success: boolean; planes?: FuneralPlanPer[] }>(
     `/personas/planes?${qs.toString()}`,
