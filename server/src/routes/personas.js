@@ -46,6 +46,11 @@ router.get('/planes', async (req, res) => {
   meta.cproducto = cproducto;
   try {
     const planes = await getPlanesPersonas(cramo, meta);
+    res.set({
+      'Cache-Control': 'no-store, no-cache, must-revalidate, private',
+      Pragma: 'no-cache',
+      Expires: '0',
+    });
     return res.json({ success: true, planes });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);
