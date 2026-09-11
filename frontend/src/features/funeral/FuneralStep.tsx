@@ -231,6 +231,16 @@ export function FuneralStep() {
     asegurado.sexo,
     asegurado.telefono,
     asegurado.email,
+    asegurado.estadoCivil,
+    asegurado.cestado,
+    asegurado.cciudad,
+    asegurado.direccion,
+    asegurado.peso,
+    asegurado.estatura,
+    tomador.estadoCivil,
+    tomador.cestado,
+    tomador.cciudad,
+    tomador.direccion,
   ]);
   const catalogs = useCatalogs();
   const [, setAsegErrors] = useState<PersonErrors[]>([]);

@@ -28,6 +28,13 @@ export interface ProprietaryInfo {
   nestatura?: number;
 }
 
+function metricFromSis(v: number | string | undefined | null): string | undefined {
+  if (v == null || v === '') return undefined;
+  const n = Number(String(v).replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return String(v).trim();
+}
+
 export interface PersonFormPatch {
   tipoDoc?: string;
   identificacion?: string;
@@ -45,6 +52,8 @@ export interface PersonFormPatch {
   direccion?: string;
   xprofesion?: string;
   xactividad?: string;
+  peso?: string;
+  estatura?: string;
 }
 
 function labelFromCatalog(
@@ -131,6 +140,11 @@ export function mapProprietaryToPerson(
     xactividad: clipPersonField('nombre', String(info.xactividad ?? '').trim()) || undefined,
   };
 
+  const peso = metricFromSis(info.npeso);
+  const estatura = metricFromSis(info.nestatura);
+  if (peso) patch.peso = peso;
+  if (estatura) patch.estatura = estatura;
+
   if (tipoDoc) patch.tipoDoc = tipoDoc.slice(0, PERSON_FIELD_LIMITS.tipoDoc);
   if (Number.isFinite(cestado)) patch.cestado = cestado;
   if (Number.isFinite(cciudad)) patch.cciudad = cciudad;
@@ -159,6 +173,8 @@ const SIS2000_CONTACT_KEYS: Array<keyof PersonFormPatch> = [
   'direccion',
   'xprofesion',
   'xactividad',
+  'peso',
+  'estatura',
 ];
 
 /**

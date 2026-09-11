@@ -104,6 +104,10 @@ export type PersonData = {
   ciudad?: string;
   cciudad?: number;
   direccion?: string;
+  /** Peso en kg (maclient.npeso). */
+  peso?: string;
+  /** Estatura en metros (maclient.nestatura). */
+  estatura?: string;
 };
 
 export interface PlanParentesco {
@@ -152,6 +156,16 @@ export interface FuneralPerson {
   pporcen?: number;
   telefono?: string;
   email?: string;
+  estadoCivil?: string;
+  estado?: string;
+  cestado?: number;
+  ciudad?: string;
+  cciudad?: number;
+  direccion?: string;
+  /** Peso en kg (maclient.npeso). */
+  peso?: string;
+  /** Estatura en metros (maclient.nestatura). */
+  estatura?: string;
 }
 
 /**
