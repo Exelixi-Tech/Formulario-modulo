@@ -37,8 +37,13 @@ function funeralCanalFromReq(req) {
 }
 
 router.get('/planes', async (req, res) => {
-  const cramo = req.query.cramo != null ? Number(req.query.cramo) : 9;
   const meta = funeralCanalFromReq(req);
+  const cproducto = meta.cproducto || process.env.LAMUNDIAL_PRODUCTO_FUNERARIO || '57';
+  const cramo = cproducto === '57'
+    ? 45
+    : (req.query.cramo != null ? Number(req.query.cramo) : 9);
+  if (String(meta.cproductor || '') === '80080') delete meta.cproductor;
+  meta.cproducto = cproducto;
   try {
     const planes = await getPlanesPersonas(cramo, meta);
     return res.json({ success: true, planes });

@@ -723,6 +723,9 @@ export async function fetchFuneralPlanes(cramo = 9): Promise<FuneralPlanPer[]> {
   if (meta.cramo != null && String(meta.cramo).trim() !== '') {
     qs.set('cramo', String(meta.cramo).trim());
   }
+  if (!qs.get('cproducto')) qs.set('cproducto', '57');
+  if (qs.get('cproducto') === '57') qs.set('cramo', '45');
+  if (qs.get('cproductor') === '80080') qs.delete('cproductor');
   const { data } = await api.get<{ success: boolean; planes?: FuneralPlanPer[] }>(
     `/personas/planes?${qs.toString()}`,
   );
