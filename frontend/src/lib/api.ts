@@ -720,6 +720,9 @@ export async function fetchFuneralPlanes(cramo = 9): Promise<FuneralPlanPer[]> {
   if (!qs.get('citem') && meta.cproductor != null && String(meta.cproductor).trim() !== '') {
     qs.set('citem', String(meta.cproductor).trim());
   }
+  if (meta.cramo != null && String(meta.cramo).trim() !== '') {
+    qs.set('cramo', String(meta.cramo).trim());
+  }
   const { data } = await api.get<{ success: boolean; planes?: FuneralPlanPer[] }>(
     `/personas/planes?${qs.toString()}`,
   );
