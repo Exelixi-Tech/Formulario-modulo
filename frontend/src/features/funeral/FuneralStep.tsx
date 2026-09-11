@@ -24,7 +24,7 @@ import {
 import { toast } from '../../store/toastStore';
 import { SectionCard } from '../emission/EmissionStep';
 import type { FuneralPerson } from '../../types';
-import { Users, Heart, Trash2 } from 'lucide-react';
+import { Users, Heart, Plus, Trash2 } from 'lucide-react';
 
 const EMPRESA_ID = Number(import.meta.env.VITE_EMPRESA_ID ?? 1);
 
@@ -233,9 +233,9 @@ export function FuneralStep() {
     asegurado.email,
   ]);
   const catalogs = useCatalogs();
-  const [asegErrors, setAsegErrors] = useState<PersonErrors[]>([]);
+  const [, setAsegErrors] = useState<PersonErrors[]>([]);
   const [benefErrors, setBenefErrors] = useState<PersonErrors[]>([]);
-  const [cedulaChecking, setCedulaChecking] = useState<Record<number, boolean>>({});
+  const [, setCedulaChecking] = useState<Record<number, boolean>>({});
   const [planParentescos, setPlanParentescos] = useState<PlanParentesco[]>([]);
   const lastAsegCedula = useRef<Record<number, string>>({});
   const lastAsegOk = useRef<Record<number, boolean>>({});
@@ -415,7 +415,11 @@ export function FuneralStep() {
 
   const validate = async (): Promise<boolean> => {
     const titular = funeral.asegurados[0];
-    const aErr = [validatePerson(titular || {}, true)];
+    if (!titular) {
+      toast.warning('No se puede guardar', 'Falta el titular.', 5000);
+      return false;
+    }
+    const aErr = [validatePerson(titular, true)];
 
     setAsegErrors(aErr);
     setBenefErrors([]);
