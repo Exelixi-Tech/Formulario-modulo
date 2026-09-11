@@ -10,7 +10,6 @@ import { fetchFuneralPlanes } from '../../lib/api';
 import {
   additionalParentescos,
   ageErrorForParentesco,
-  isTitularOnlyPlan,
   unionAdditionalParentescos,
   type PlanParentesco,
 } from '../../lib/funeralPlanParentescos';
@@ -25,7 +24,7 @@ import {
 import { toast } from '../../store/toastStore';
 import { SectionCard } from '../emission/EmissionStep';
 import type { FuneralPerson } from '../../types';
-import { Users, Heart, Plus, Trash2 } from 'lucide-react';
+import { Users, Heart, Trash2 } from 'lucide-react';
 
 const EMPRESA_ID = Number(import.meta.env.VITE_EMPRESA_ID ?? 1);
 
@@ -241,7 +240,6 @@ export function FuneralStep() {
   const lastAsegCedula = useRef<Record<number, string>>({});
   const lastAsegOk = useRef<Record<number, boolean>>({});
   const productCfg = getProductConfig();
-  const titularOnly = isTitularOnlyPlan(selectedPlan?.parentescos ?? planParentescos);
 
   useEffect(() => {
     let cancelled = false;
@@ -285,21 +283,6 @@ export function FuneralStep() {
   const sexoOptions = catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }));
 
   // ── Helpers de listas ─────────────────────────────────────────────────────
-  const updateAsegurado = (idx: number, patch: Partial<FuneralPerson>) => {
-    if (patch.identificacion != null) lastAsegCedula.current[idx] = '';
-    const next = funeral.asegurados.map((a, i) => (i === idx ? { ...a, ...patch } : a));
-    setFuneral({ asegurados: next });
-  };
-  const addAsegurado = () =>
-    setFuneral({
-      asegurados: [
-        ...funeral.asegurados,
-        { tipoDoc: 'V', identificacion: '', nombre: '', apellido: '', fechaNac: '', sexo: '', parentesco: '' },
-      ],
-    });
-  const removeAsegurado = (idx: number) =>
-    setFuneral({ asegurados: funeral.asegurados.filter((_, i) => i !== idx) });
-
   const updateBeneficiario = (idx: number, patch: Partial<FuneralPerson>) => {
     const next = funeral.beneficiarios.map((b, i) => (i === idx ? { ...b, ...patch } : b));
     setFuneral({ beneficiarios: next });
@@ -431,22 +414,19 @@ export function FuneralStep() {
   }, [funeral.asegurados, checkAseguradoCedula]);
 
   const validate = async (): Promise<boolean> => {
-    const aErr = funeral.asegurados.map((p, i) => validatePerson(p, i === 0));
+    const titular = funeral.asegurados[0];
+    const aErr = [validatePerson(titular || {}, true)];
 
     setAsegErrors(aErr);
     setBenefErrors([]);
 
     const firstErr = aErr.find((e) => Object.keys(e).length > 0);
     if (firstErr) {
-      const msg = Object.values(firstErr)[0] || 'Revisa los datos del asegurado adicional.';
+      const msg = Object.values(firstErr)[0] || 'Revisa los datos del titular.';
       toast.warning('No se puede guardar', msg, 5000);
       return false;
     }
 
-    for (let i = 1; i < funeral.asegurados.length; i++) {
-      const ok = await checkAseguradoCedula(i, funeral.asegurados[i].identificacion);
-      if (!ok) return false;
-    }
     return true;
   };
 
@@ -459,68 +439,29 @@ export function FuneralStep() {
       <SectionCard
         Icon={Users}
         title="Personas aseguradas"
-        description="El titular ya viene del paso 2. Aquí solo agregas otras personas cubiertas."
+        description="El titular ya viene del paso 2. Los adicionales se agregan al elegir el plan."
       >
         <div className="space-y-5">
-          {funeral.asegurados.map((aseg, idx) => (
+          {funeral.asegurados.slice(0, 1).map((aseg, idx) => (
             <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[0.7rem] font-black uppercase tracking-wider text-indigo-600">
-                  {idx === 0 ? 'Titular' : `Asegurado ${idx + 1}`}
+                  Titular
                 </span>
-                {idx > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => removeAsegurado(idx)}
-                    className="inline-flex items-center gap-1 text-[0.7rem] font-bold text-rose-500 hover:text-rose-600 min-h-[44px] px-2 touch-manipulation"
-                  >
-                    <Trash2 size={12} /> Quitar
-                  </button>
-                )}
               </div>
-              {idx === 0 ? (
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  <span className="font-semibold text-slate-800">
-                    {aseg.nombre} {aseg.apellido}
-                  </span>
-                  {aseg.identificacion ? ` · ${aseg.tipoDoc || 'V'}-${aseg.identificacion}` : ''}
-                  <span className="block text-[0.78rem] text-slate-500 mt-1">
-                    {sameInsured !== false
-                      ? 'Es la misma persona del tomador. No hay que volver a cargar los datos.'
-                      : 'Datos cargados en el paso 2. No hay que volver a llenarlos.'}
-                  </span>
-                </p>
-              ) : (
-                <PersonFields
-                  person={aseg}
-                  errors={asegErrors[idx] ?? {}}
-                  isTitular={false}
-                  parentescoOptions={parentescoOptions}
-                  sexoOptions={sexoOptions}
-                  loading={catalogs.loading}
-                  identityLoading={Boolean(cedulaChecking[idx])}
-                  onChange={(patch) => updateAsegurado(idx, patch)}
-                  onIdentificacionBlur={(id) => {
-                    void checkAseguradoCedula(idx, id);
-                  }}
-                />
-              )}
+              <p className="text-sm text-slate-600 leading-relaxed">
+                <span className="font-semibold text-slate-800">
+                  {aseg.nombre} {aseg.apellido}
+                </span>
+                {aseg.identificacion ? ` · ${aseg.tipoDoc || 'V'}-${aseg.identificacion}` : ''}
+                <span className="block text-[0.78rem] text-slate-500 mt-1">
+                  {sameInsured !== false
+                    ? 'Es la misma persona del tomador. No hay que volver a cargar los datos.'
+                    : 'Datos cargados en el paso 2. No hay que volver a llenarlos.'}
+                </span>
+              </p>
             </div>
           ))}
-
-          {titularOnly ? (
-            <p className="text-sm text-slate-500">
-              El plan elegido solo admite titular. No se pueden agregar asegurados adicionales.
-            </p>
-          ) : (
-            <button
-              type="button"
-              onClick={addAsegurado}
-              className="inline-flex items-center justify-center gap-2 w-full sm:w-auto px-4 py-2.5 min-h-[44px] rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 text-sm font-bold hover:border-indigo-400 hover:bg-indigo-50/50 transition-all touch-manipulation"
-            >
-              <Plus size={15} /> Agregar asegurado
-            </button>
-          )}
         </div>
       </SectionCard>
       )}

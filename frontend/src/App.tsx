@@ -68,7 +68,7 @@ const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario', Record<2 | 3, StepMeta>>
     3: {
       eyebrow: 'Paso 03 · Personas',
       title: 'Personas aseguradas',
-      sub: 'El titular ya está cargado. Agrega solo otras personas cubiertas si aplica.',
+      sub: 'El titular ya está cargado. Los adicionales se agregan al elegir el plan.',
     },
   },
 };
