@@ -25,8 +25,8 @@ function funeralCanalFromReq(req) {
   if (payload.canal && !meta.canal) meta.canal = payload.canal;
   const q = req.query || {};
   const keys = [
-    'centidad', 'citem', 'cgestor', 'cproducto', 'cproductor', 'cusuario',
-    'ccanalalt', 'ccanalalt_in',
+    'centidad', 'citem', 'cgestor', 'cgestor_in', 'cproducto', 'cproductor',
+    'cusuario', 'ccanalalt', 'ccanalalt_in',
   ];
   for (const key of keys) {
     if (q[key] != null && String(q[key]).trim() !== '') {
