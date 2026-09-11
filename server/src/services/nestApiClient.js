@@ -368,25 +368,31 @@ async function checkPolizaVigentePersonas({ rif, cramo } = {}) {
 }
 
 /**
- * Planes funerarios + parentescos (nest-api POST /personas/planes).
+ * Planes funerarios del canal SSO (nest-api POST /personas/planes).
  * @param {number} [cramo]
+ * @param {Record<string, unknown>} [canal]
  * @returns {Promise<Array>}
  */
-async function getPlanesPersonas(cramo = 9) {
+async function getPlanesPersonas(cramo = 9, canal = {}) {
   const url = `${getBaseUrl()}/api/v1/personas/planes`;
+  const body = { cramo: Number(cramo) || 9 };
+  if (canal.citem) body.citem = String(canal.citem).trim();
+  if (canal.centidad) body.centidad = String(canal.centidad).trim();
+  if (canal.cproducto) body.cproducto = String(canal.cproducto).trim();
+  if (canal.cproductor) body.cproductor = String(canal.cproductor).trim();
   const response = await axios.post(
     url,
-    { cramo: Number(cramo) || 9 },
+    body,
     await axiosOpts({ validateStatus: () => true }),
   );
-  const body = response.data ?? {};
-  if (response.status >= 400 || body.status === false) {
-    const err = new Error(body?.message || `HTTP ${response.status} personas/planes`);
+  const resBody = response.data ?? {};
+  if (response.status >= 400 || resBody.status === false) {
+    const err = new Error(resBody?.message || `HTTP ${response.status} personas/planes`);
     err.status = response.status;
-    err.code = body?.code || 'PERSONAS_PLANES_ERROR';
+    err.code = resBody?.code || 'PERSONAS_PLANES_ERROR';
     throw err;
   }
-  return body.data?.planes ?? body.planes ?? [];
+  return resBody.data?.planes ?? resBody.planes ?? [];
 }
 
 module.exports = {
