@@ -2,7 +2,9 @@ import axios, { AxiosError } from 'axios';
 import type { DocType, OcrResult, DocumentFile } from '../types';
 import { toOcrEngineDocType } from './ocr-engine-doc';
 import { moduleApiBase } from './app-base';
-import { attachNexusTokenAxios } from './nexus-token-client';
+import { attachNexusTokenAxios, decodeNexusTokenMetadata, getNexusToken } from './nexus-token-client';
+import { useWizardStore } from '../store/wizardStore';
+import { readMarketplaceActorSnapshot } from './sso-metadata';
 
 const api = axios.create({ baseURL: moduleApiBase() });
 
@@ -694,8 +696,26 @@ export interface FuneralPlanPer {
 }
 
 export async function fetchFuneralPlanes(cramo = 9): Promise<FuneralPlanPer[]> {
+  const qs = new URLSearchParams();
+  qs.set('cramo', String(cramo));
+  const token = getNexusToken(NEXUS_TOKEN_KEY);
+  const tokenMeta = token ? decodeNexusTokenMetadata(token) : null;
+  const storeMeta = (useWizardStore.getState().metadataCanal as Record<string, unknown> | null) ?? {};
+  const meta: Record<string, unknown> = {
+    ...readMarketplaceActorSnapshot(),
+    ...(tokenMeta || {}),
+    ...storeMeta,
+  };
+  for (const key of [
+    'centidad', 'citem', 'cgestor', 'cgestor_in', 'cproducto', 'cproductor',
+    'ccanalalt', 'ccanalalt_in', 'cscanalalt', 'cscanalalt_in',
+  ]) {
+    if (meta[key] != null && String(meta[key]).trim() !== '') {
+      qs.set(key, String(meta[key]).trim());
+    }
+  }
   const { data } = await api.get<{ success: boolean; planes?: FuneralPlanPer[] }>(
-    `/personas/planes?cramo=${encodeURIComponent(String(cramo))}`,
+    `/personas/planes?${qs.toString()}`,
   );
   return data.planes ?? [];
 }
