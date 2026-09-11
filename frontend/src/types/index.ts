@@ -83,6 +83,8 @@ export type TomadorData = {
   xprofesion?: string;
   xactividad?: string;
   itipoDiligencia?: 'S' | 'C';
+  peso?: string;
+  estatura?: string;
 };
 
 export type PersonData = {
