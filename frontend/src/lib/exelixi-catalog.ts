@@ -12,7 +12,7 @@ import { applyOcrPersonRoles } from './ocr-person-roles';
 import { applyFuneralOcrCedulas } from './funeral-ocr-apply';
 import { toDiligenciaDocTypes, type DiligenciaDocType } from './diligencia';
 import type { PersonData } from '../types';
-import { persistTarjetaMetadataCanal } from './rcv-tarjeta-flow';
+import { persistTarjetaMetadataCanal, resolveTipoPlacaForTarjetaFlow } from './rcv-tarjeta-flow';
 import { useWizardStore } from '../store/wizardStore';
 
 export type BuilderProductBranch =
@@ -304,7 +304,7 @@ export function applyExelixiOcrHandoff(
       serialMotor: normalizeMotorSerial(sanitizeOcrField(cert.serialMotor)),
       cilindrada: rcvHandoff ? cert.cilindrada ?? '' : '',
       tipoCarnet: rcvHandoff ? cert.tipoCarnet : undefined,
-      tipoPlaca: resolveOcrTipoPlaca(cert),
+      tipoPlaca: resolveTipoPlacaForTarjetaFlow(resolveOcrTipoPlaca(cert)),
     });
   }
 
