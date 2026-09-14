@@ -310,6 +310,22 @@ export function VehicleStep() {
   }, [rcvLaMundial, vehicle.tipoPlaca, setVehicle]);
 
   useEffect(() => {
+    if (!tarjetaFlow || vehicle.tipoPlaca !== 'binacional') return;
+    setVehicle({
+      tipoPlaca: 'nacional',
+      cmarca: '',
+      marca: '',
+      cmodelo: '',
+      modelo: '',
+      cversion: '',
+      ccategoria_uso: undefined,
+      xcategoria_uso: '',
+      ccategotr: undefined,
+      cilindrada: '',
+    });
+  }, [tarjetaFlow, vehicle.tipoPlaca, setVehicle]);
+
+  useEffect(() => {
     if (rcvLaMundial || vehicle.tipoPlaca !== 'binacional') return;
     setVehicle({
       tipoPlaca: 'nacional',
@@ -981,7 +997,7 @@ export function VehicleStep() {
               placa={vehicle.placa}
               certOcr={ocrCert}
               onChange={setTipoPlaca}
-              showBinacional={rcvLaMundial}
+              showBinacional={rcvLaMundial && !tarjetaFlow}
               disabled={qaIdentLock}
             />
           )}
