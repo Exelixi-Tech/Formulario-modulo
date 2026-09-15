@@ -35,6 +35,7 @@ import {
 } from './sso-metadata';
 import { persistFlowHandoff, readFlowHandoff, encodeFlowHandoff } from './flow-handoff';
 import { mergeExelixiWizardHandoff } from './exelixi-wizard-handoff';
+import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-flow';
 
 // ── Configuración por puerto (dev local) o hostname (HTTPS sslip.io) ───────
 const PORT_TO_ORDER: Record<string, number> = {
@@ -107,14 +108,9 @@ function getModuleTokenKey(): string {
   return PORT_TO_TOKEN_KEY[window.location.port ?? ''] ?? 'nexus_access_token';
 }
 
-/** Flow (session/save/done) usa /nexus-api de Apache → admin :3091.
- *  No usar /formulario/nexus-api (eso es verify en :3092 y no tiene /api/flow). */
-const bridgeHost = () => {
-  if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
-    return `${window.location.origin}/nexus-api`;
-  }
-  return resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
-};
+/** Flow (session/save/done): misma base que NexusGuard (GCIA → nexus-api.exelixitech.com). */
+const bridgeHost = () =>
+  resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
 const QUERY_KEY   = 'sid';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
@@ -420,14 +416,36 @@ function makeBridge(): BridgeAPI {
             target = url.toString();
           } catch { /* ignore */ }
         }
-        setTimeout(() => { window.location.href = target; }, 600);
-        return out;
+        if (shouldUseTarjetaPublicApi()) {
+          target = withTarjetaFlowQuery(target);
+        }
+        setTimeout(() => { window.location.href = target; }, 900);
       }
       fallbackAdvanceToEmision(extra);
       return out ?? { finished: true };
     } catch (e) {
-      console.warn('[bridge] advance failed, falling back to direct redirect', e);
-      fallbackAdvanceToEmision(extra);
+      console.warn('[bridge] advance failed', e);
+      if (order === 2) {
+        const emisionBase = (
+          (import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined)?.replace(/\/$/, '')
+          || '/emision'
+        );
+        const params = new URLSearchParams();
+        if (sid) params.set('sid', sid);
+        const token =
+          getNexusTokenFromUrl()
+          || (typeof sessionStorage !== 'undefined'
+            ? sessionStorage.getItem(getModuleTokenKey())
+            : null);
+        if (token) params.set('nexus_token', token);
+        try {
+          const product = sessionStorage.getItem('exelixi_product') || 'rcv';
+          params.set('product', product);
+        } catch {
+          params.set('product', 'rcv');
+        }
+        window.location.href = withTarjetaFlowQuery(`${emisionBase}/?${params.toString()}`);
+      }
       return { finished: true };
     }
   };

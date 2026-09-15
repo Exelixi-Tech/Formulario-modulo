@@ -15,6 +15,7 @@ import { applyMetadataFromNexusToken } from './lib/nexus-token-client';
 import { mergeMarketplaceActorMetadata } from './lib/sso-metadata';
 import { continueToEmisionModule } from './lib/exelixi-catalog';
 import { continueToEmisionCotizador, isCotizadorFlow } from './lib/cotizador-flow';
+import { continueTarjetaToEmision, shouldUseTarjetaPublicApi } from './lib/rcv-tarjeta-flow';
 import type { ExelixiWizardHandoff } from './lib/exelixi-wizard-handoff';
 import { syncTitularFromTomador } from './lib/funeral-sync';
 import { toast } from './store/toastStore';
@@ -69,7 +70,7 @@ const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario' | 'patrimoniales' | 'bien
     3: {
       eyebrow: 'Paso 03 · Personas',
       title: 'Personas aseguradas',
-      sub: 'El titular ya está cargado. Agrega solo otras personas cubiertas si aplica.',
+      sub: 'El titular ya está cargado. Los adicionales se agregan al elegir el plan.',
     },
   },
   patrimoniales: {
@@ -155,13 +156,8 @@ export default function App() {
   const { hideStepper, hideFooterBar } = useUiFlags(config);
 
   useEffect(() => {
-    if (isFunerario() && step === 3) {
-      setLocalStep(2);
-      goTo(2);
-      return;
-    }
     if (step === 2 || step === 3) setLocalStep(step);
-  }, [step, goTo]);
+  }, [step]);
 
   function navigate(to: 2 | 3) {
     setLocalStep(to);
@@ -200,9 +196,9 @@ export default function App() {
         );
         const snapshot = buildExelixiWizardSnapshot();
         if (product.exelixiCatalog) {
-          continueToEmisionModule(snapshot);
-        } else if (typeof window.__bridgeAdvance === 'function') {
-          void window.__bridgeAdvance(snapshot);
+          continueToEmisionModule(buildExelixiWizardSnapshot());
+        } else if (shouldUseTarjetaPublicApi()) {
+          continueTarjetaToEmision();
         } else {
           continueToEmisionModule(snapshot);
         }
@@ -228,9 +224,9 @@ export default function App() {
       );
       const snapshot = buildExelixiWizardSnapshot();
       if (product.exelixiCatalog) {
-        continueToEmisionModule(snapshot);
-      } else if (typeof window.__bridgeAdvance === 'function') {
-        void window.__bridgeAdvance(snapshot);
+        continueToEmisionModule(buildExelixiWizardSnapshot());
+      } else if (shouldUseTarjetaPublicApi()) {
+        continueTarjetaToEmision();
       } else {
         continueToEmisionModule(snapshot);
       }

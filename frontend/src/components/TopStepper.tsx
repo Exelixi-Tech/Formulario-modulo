@@ -75,9 +75,7 @@ export function TopStepper() {
     ? [3]
     : product.exelixiCatalog
       ? [2, 3]
-      : product.id === 'funerario'
-        ? [2]
-        : [2, 3];
+      : [2, 3];
   const EXELIXI_LOCAL_STEPS = LOCAL_STEPS;
 
   function bridgeNavAvailable(): boolean {
@@ -129,7 +127,7 @@ export function TopStepper() {
     ? (STEPS[STEPS.length - 1]?.n ?? 2)
     : 5;
   const canPrev = prevStep != null && !navigating && canGoTo(prevStep);
-  const nextTarget = product.id === 'funerario' && step === 2 ? 4 : step + 1;
+  const nextTarget = step + 1;
   const canNext = step < maxStep && !navigating && canGoTo(nextTarget);
 
   return (

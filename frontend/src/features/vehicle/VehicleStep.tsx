@@ -45,6 +45,7 @@ import {
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import type { VehicleData } from '../../types';
+import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 
 const COLOR_SWATCHES: Record<string, string> = {
   blanco: '#F8FAFC', negro: '#0F172A', gris: '#94A3B8', plateado: '#CBD5E1',
@@ -220,9 +221,11 @@ export function VehicleStep() {
   const exelixiFlow = isExelixiCatalogFlow();
   const cotizadorRcv = isCotizadorFlow();
   const rcvLaMundial = isRcvLaMundialFlow();
+  const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = rcvLaMundial && !cotizadorRcv;
   const conductorCiudades = useCiudades(conductor.cestado);
-  const isBinacional = rcvLaMundial && vehicle.tipoPlaca === 'binacional';
+  const effectiveTipoPlaca = tarjetaFlow ? 'nacional' : (vehicle.tipoPlaca ?? 'nacional');
+  const isBinacional = rcvLaMundial && !tarjetaFlow && vehicle.tipoPlaca === 'binacional';
   const showToneladas = rcvLaMundial && isCategoriaToneladas(vehicle.ccategoria_uso);
 
   // Al entrar desde cliente el scroll queda abajo (conductor habitual). Ir a datos del vehículo.
@@ -285,6 +288,7 @@ export function VehicleStep() {
   }, [rcvLaMundial, setVehicle]);
 
   const setTipoPlaca = useCallback((tipoPlaca: VehicleData['tipoPlaca']) => {
+    if (tarjetaFlow && tipoPlaca !== 'nacional') return;
     if (tipoPlaca === 'binacional' && !rcvLaMundial) return;
     const nextBi = tipoPlaca === 'binacional';
     const prevBi = vehicle.tipoPlaca === 'binacional';
@@ -305,7 +309,29 @@ export function VehicleStep() {
       return;
     }
     setVehicle({ tipoPlaca });
-  }, [rcvLaMundial, vehicle.tipoPlaca, setVehicle]);
+  }, [rcvLaMundial, tarjetaFlow, vehicle.tipoPlaca, setVehicle]);
+
+  useEffect(() => {
+    if (!tarjetaFlow || vehicle.tipoPlaca === 'nacional') return;
+    const wasBinacional = vehicle.tipoPlaca === 'binacional';
+    setVehicle({
+      tipoPlaca: 'nacional',
+      tipoCarnet: 'nacional',
+      ...(wasBinacional
+        ? {
+            cmarca: '',
+            marca: '',
+            cmodelo: '',
+            modelo: '',
+            cversion: '',
+            ccategoria_uso: undefined,
+            xcategoria_uso: '',
+            ccategotr: undefined,
+            cilindrada: '',
+          }
+        : {}),
+    });
+  }, [tarjetaFlow, vehicle.tipoPlaca, setVehicle]);
 
   useEffect(() => {
     if (rcvLaMundial || vehicle.tipoPlaca !== 'binacional') return;
@@ -724,7 +750,9 @@ export function VehicleStep() {
       if (req(vehicle.cmodelo)) e.modelo = 'Selecciona el modelo del catálogo';
       else if (req(vehicle.modelo)) e.modelo = 'El modelo es obligatorio';
       if (req(vehicle.cversion)) e.version = 'Debes seleccionar la versión exacta del vehículo';
-      else if (!vehicle.ccategoria_uso && req(vehicle.uso)) e.uso = 'Selecciona el uso del vehículo';
+      else if (!tarjetaFlow && !vehicle.ccategoria_uso && req(vehicle.uso)) {
+        e.uso = 'Selecciona el uso del vehículo';
+      }
       if (rcvLaMundial && showToneladas && (vehicle.ntoneladas == null || Number.isNaN(Number(vehicle.ntoneladas)))) {
         e.toneladas = 'Indica las toneladas totales (mín. 13 TM)';
       }
@@ -737,7 +765,7 @@ export function VehicleStep() {
       return true;
     }
 
-    const placaErr = validatePlacaMessage(vehicle.placa, vehicle.tipoPlaca ?? 'nacional');
+    const placaErr = validatePlacaMessage(vehicle.placa, effectiveTipoPlaca);
     if (placaErr) e.placa = placaErr;
 
     if (req(vehicle.año)) e.año = 'Selecciona el año del vehículo';
@@ -746,7 +774,9 @@ export function VehicleStep() {
     else if (req(vehicle.modelo)) e.modelo = 'El modelo es obligatorio';
 
     if (req(vehicle.cversion)) e.version = 'Debes seleccionar la versión exacta del vehículo';
-    else if (!vehicle.ccategoria_uso && req(vehicle.uso)) e.uso = 'Selecciona el uso del vehículo';
+    else if (!tarjetaFlow && !vehicle.ccategoria_uso && req(vehicle.uso)) {
+      e.uso = 'Selecciona el uso del vehículo';
+    }
 
     if (rcvLaMundial && showToneladas && (vehicle.ntoneladas == null || Number.isNaN(Number(vehicle.ntoneladas)))) {
       e.toneladas = 'Indica las toneladas totales (mín. 13 TM)';
@@ -969,7 +999,7 @@ export function VehicleStep() {
       >
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
 
-          {(cotizadorRcv || isRcvEmision) && (
+          {(cotizadorRcv || isRcvEmision) && !tarjetaFlow && (
             <TipoPlacaSelector
               value={vehicle.tipoPlaca}
               placa={vehicle.placa}
@@ -996,9 +1026,9 @@ export function VehicleStep() {
                 onBlur={(e) => {
                   void validatePlacaRemote(e.target.value);
                 }}
-                placeholder={placaPlaceholder(vehicle.tipoPlaca)}
+                placeholder={placaPlaceholder(effectiveTipoPlaca)}
                 className="uppercase font-mono tracking-wider"
-                maxLength={placaMaxLength(vehicle.tipoPlaca)}
+                maxLength={placaMaxLength(effectiveTipoPlaca)}
                 disabled={placaValidating || qaIdentLock}
               />
               {placaValidating && (
@@ -1180,7 +1210,8 @@ export function VehicleStep() {
             </Field>
           )}
 
-          {/* Uso — categorías dinámicas según la versión seleccionada */}
+          {/* Uso — oculto en flujo tarjeta (plan FARMPA/FARMMO fija el tipo) */}
+          {!tarjetaFlow && (
           <Field
             anchor="veh-uso"
             error={errors.uso}
@@ -1258,8 +1289,9 @@ export function VehicleStep() {
               </Select>
             )}
           </Field>
+          )}
 
-          {rcvLaMundial && (
+          {rcvLaMundial && !tarjetaFlow && (
             <>
               <Field
                 label="Actividades asociadas (Recargo RCV) *"
@@ -1576,11 +1608,11 @@ export function VehicleStep() {
                   maxLength={PERSON_FIELD_LIMITS.direccion}
                 />
               </Field>
-              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir *" error={errors.cond_licencia} hint="Máx. 20 caracteres alfanuméricos" full>
+              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir *" error={errors.cond_licencia} hint="Ingreso manual. Formato nuevo: Nro. de Verificación (frontal). Antiguo: reverso. Máx. 20 caracteres." full>
                 <Input
                   value={conductor.licencia ?? ''}
                   onChange={(e) => setConductor({ licencia: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) })}
-                  placeholder="Ej. LIC-0234567"
+                  placeholder="Ej. 190203935943"
                   className="uppercase font-mono tracking-wider"
                   maxLength={20}
                 />
