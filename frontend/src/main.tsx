@@ -7,15 +7,23 @@ import bridgeReady from './lib/bridge'
 import { NexusGuard } from './nexus/NexusGuard'
 import { applyExelixiOcrHandoff } from './lib/exelixi-catalog'
 import { applyOcrPersonRolesFromDocuments } from './lib/ocr-person-roles'
+import { applyFuneralOcrCedulas } from './lib/funeral-ocr-apply'
 import { isCotizadorFlow } from './lib/cotizador-flow'
 import { applyExelixiBranding } from './lib/exelixi-branding'
 import { useWizardStore } from './store/wizardStore'
-import { isRcv } from './lib/product'
+import { isFunerario, isRcv, usesFuneralStep } from './lib/product'
 import { applyMetadataFromNexusToken, getNexusTokenFromUrl } from './lib/nexus-token-client'
 import { mergeMarketplaceActorMetadata, rememberMarketplaceActorFromToken } from './lib/sso-metadata'
+import { hydrateTarjetaMetadataCanal, isTarjetaRcvFlow, markTarjetaPublicSession } from './lib/rcv-tarjeta-flow'
 
 // Identidad Exélixi (colores + favicon) solo si el flujo activo es el catálogo.
 applyExelixiBranding('Formulario');
+
+if (isTarjetaRcvFlow()) {
+  markTarjetaPublicSession();
+  hydrateTarjetaMetadataCanal();
+  useWizardStore.getState().setVehicle({ tipoPlaca: 'nacional', tipoCarnet: 'nacional' });
+}
 
 rememberMarketplaceActorFromToken(getNexusTokenFromUrl());
 
@@ -80,6 +88,10 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
             setConductor,
           });
         }
+      }
+
+      if (isFunerario() || usesFuneralStep()) {
+        applyFuneralOcrCedulas();
       }
     };
 

@@ -9,9 +9,13 @@ import { Button } from './components/ui/Button';
 import { EmissionStep } from './features/emission/EmissionStep';
 import { VehicleStep } from './features/vehicle/VehicleStep';
 import { FuneralStep } from './features/funeral/FuneralStep';
-import { getProductConfig, isFunerario, isRcv, skipsPersonasStep, usesFuneralStep, usesVehicleStep } from './lib/product';
+import { PatrimonialesStep } from './features/patrimoniales/PatrimonialesStep';
+import { getProductConfig, isFunerario, isPatrimoniales, isRcv, persistProductFromHints, skipsPersonasStep, usesFuneralStep, usesPatrimonialesStep, usesVehicleStep } from './lib/product';
+import { applyMetadataFromNexusToken } from './lib/nexus-token-client';
+import { mergeMarketplaceActorMetadata } from './lib/sso-metadata';
 import { continueToEmisionModule } from './lib/exelixi-catalog';
 import { continueToEmisionCotizador, isCotizadorFlow } from './lib/cotizador-flow';
+import { continueTarjetaToEmision, shouldUseTarjetaPublicApi } from './lib/rcv-tarjeta-flow';
 import type { ExelixiWizardHandoff } from './lib/exelixi-wizard-handoff';
 import { syncTitularFromTomador } from './lib/funeral-sync';
 import { toast } from './store/toastStore';
@@ -33,6 +37,7 @@ function buildExelixiWizardSnapshot(): Partial<ExelixiWizardHandoff> {
     beneficiario: snap.beneficiario,
     vehicle: snap.vehicle,
     funeral: snap.funeral,
+    patrimoniales: snap.patrimoniales,
     ocrDone: snap.ocrDone,
     diligencia: snap.diligencia,
   };
@@ -43,7 +48,7 @@ function buildCotizadorSnapshot(): Partial<ExelixiWizardHandoff> {
   return { vehicle: snap.vehicle, ocrDone: true };
 }
 
-const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario', Record<2 | 3, StepMeta>> = {
+const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario' | 'patrimoniales' | 'bien', Record<2 | 3, StepMeta>> = {
   rcv: {
     2: {
       eyebrow: 'Paso 02 · Emisión',
@@ -65,10 +70,35 @@ const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario', Record<2 | 3, StepMeta>>
     3: {
       eyebrow: 'Paso 03 · Personas',
       title: 'Personas aseguradas',
-      sub: 'El titular ya está cargado. Agrega solo otras personas cubiertas si aplica.',
+      sub: 'El titular ya está cargado. Los adicionales se agregan al elegir el plan.',
+    },
+  },
+  patrimoniales: {
+    2: {
+      eyebrow: 'Paso 02 · Tomador',
+      title: 'Información del cliente',
+      sub: 'Verifica los datos detectados y completa lo que falte.',
+    },
+    3: {
+      eyebrow: 'Paso 03 · Bien Asegurado',
+      title: 'Datos del Bien Asegurado',
+      sub: 'Ingresa la información básica y descripción del bien a asegurar.',
+    },
+  },
+  bien: {
+    2: {
+      eyebrow: 'Paso 02 · Tomador',
+      title: 'Información del cliente',
+      sub: 'Verifica los datos detectados y completa lo que falte.',
+    },
+    3: {
+      eyebrow: 'Paso 03 · Bien Asegurado',
+      title: 'Datos del Bien Asegurado',
+      sub: 'Ingresa la información básica y descripción del bien a asegurar.',
     },
   },
 };
+
 
 function getStepMeta(product: ReturnType<typeof getProductConfig>, localStep: 2 | 3): StepMeta {
   if (product.exelixiCatalog) {
@@ -89,6 +119,9 @@ function getStepMeta(product: ReturnType<typeof getProductConfig>, localStep: 2 
     if (product.useFuneralStep) {
       return STEP_META_BY_PRODUCT.funerario[3];
     }
+    if (product.usesPatrimonialesStep || product.usesBienStep) {
+      return STEP_META_BY_PRODUCT.patrimoniales[3];
+    }
     return STEP_META_BY_PRODUCT.rcv[2];
   }
   return STEP_META_BY_PRODUCT[product.id][localStep];
@@ -101,22 +134,30 @@ export default function App() {
     return <FormularioConfigPanel />;
   }
 
-  const { goTo } = useWizardStore();
+  const { goTo, setMetadataCanal } = useWizardStore();
   const step = useWizardStore((s) => s.step);
+
+  useEffect(() => {
+    applyMetadataFromNexusToken('nexus_access_token_formulario', (metadata) => {
+      const current = useWizardStore.getState().metadataCanal || {};
+      setMetadataCanal(mergeMarketplaceActorMetadata({ ...current, ...metadata }));
+      if (metadata.product === 'funerario' || metadata.product === 'rcv' || metadata.product === 'bien') {
+        persistProductFromHints({ product: String(metadata.product) });
+      }
+    });
+  }, [setMetadataCanal]);
   const cotizadorRcv = isCotizadorFlow() && isRcv();
-  const [localStep, setLocalStep] = useState<2 | 3>(() => (cotizadorRcv || step === 3 ? 3 : 2));
+  const initialStepFromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('step') : null;
+  const [localStep, setLocalStep] = useState<2 | 3>(() => (
+    initialStepFromUrl === '3' ? 3 : initialStepFromUrl === '2' ? 2 : (cotizadorRcv || step === 3 ? 3 : 2)
+  ));
   const product = getProductConfig();
   const { config } = useProductConfig(EMPRESA_ID, product.id, 'formulario');
   const { hideStepper, hideFooterBar } = useUiFlags(config);
 
   useEffect(() => {
-    if (isFunerario() && step === 3) {
-      setLocalStep(2);
-      goTo(2);
-      return;
-    }
     if (step === 2 || step === 3) setLocalStep(step);
-  }, [step, goTo]);
+  }, [step]);
 
   function navigate(to: 2 | 3) {
     setLocalStep(to);
@@ -142,10 +183,6 @@ export default function App() {
       if (validate) {
         const isValid = await validate();
         if (!isValid) {
-          toast.warning(
-            'No se puede continuar',
-            'Revisa la cédula y los campos obligatorios. Si ya hay póliza vigente, el proceso se detiene aquí.',
-          );
           return;
         }
       }
@@ -157,10 +194,13 @@ export default function App() {
           '¡Formulario completado!',
           'Datos del cliente y beneficiarios guardados correctamente.',
         );
+        const snapshot = buildExelixiWizardSnapshot();
         if (product.exelixiCatalog) {
           continueToEmisionModule(buildExelixiWizardSnapshot());
+        } else if (shouldUseTarjetaPublicApi()) {
+          continueTarjetaToEmision();
         } else {
-          window.__bridgeAdvance?.();
+          continueToEmisionModule(snapshot);
         }
         return;
       }
@@ -178,22 +218,28 @@ export default function App() {
         '¡Formulario completado!',
         product.hasVehicle
           ? 'Datos del cliente y vehículo guardados correctamente.'
-          : 'Datos del cliente y las personas guardados correctamente.',
+          : usesPatrimonialesStep() || isPatrimoniales()
+            ? 'Datos del cliente y bien asegurado guardados correctamente.'
+            : 'Datos del cliente y las personas guardados correctamente.',
       );
+      const snapshot = buildExelixiWizardSnapshot();
       if (product.exelixiCatalog) {
         continueToEmisionModule(buildExelixiWizardSnapshot());
+      } else if (shouldUseTarjetaPublicApi()) {
+        continueTarjetaToEmision();
       } else {
-        window.__bridgeAdvance?.();
+        continueToEmisionModule(snapshot);
       }
     }
   }
 
+
   const meta = cotizadorRcv
     ? {
-        eyebrow: 'Paso 01 · Vehículo',
-        title: 'Datos del vehículo',
-        sub: 'Ingresa año, marca, modelo, versión y uso del vehículo para ver los planes RCV.',
-      }
+      eyebrow: 'Paso 01 · Vehículo',
+      title: 'Datos del vehículo',
+      sub: 'Ingresa año, marca, modelo, versión y uso del vehículo para ver los planes RCV.',
+    }
     : getStepMeta(product, localStep);
 
   return (
@@ -206,7 +252,7 @@ export default function App() {
       </div>
 
       <div>
-        <main className="flex-1 min-h-screen pt-[72px] lg:pt-10 px-4 sm:px-6 lg:px-10 pb-32 lg:pb-12">
+        <main className="flex-1 min-h-screen pt-[72px] lg:pt-10 px-4 sm:px-6 lg:px-10 pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-12">
           <div className="max-w-5xl mx-auto">
             {!hideStepper && <TopStepper />}
 
@@ -217,20 +263,57 @@ export default function App() {
                     <Sparkles size={11} className="text-indigo-500" />
                     {meta.eyebrow}
                   </p>
-                  <h1 className="font-display text-3xl sm:text-[2.5rem] font-black text-slate-900 tracking-tight leading-tight">
+                  <h1 className="font-display text-[1.7rem] sm:text-[2.5rem] font-black text-slate-900 tracking-tight leading-tight">
                     {meta.title}
                   </h1>
                   <p className="text-slate-500 text-sm mt-2 max-w-xl leading-relaxed">
                     {meta.sub}
                   </p>
                 </div>
+
+                {/* Switcher rápido de pruebas (RCV / Funerario / Patrimoniales) */}
+                <div className="flex items-center gap-1.5 p-1 rounded-full bg-slate-100/90 border border-slate-200/80 shadow-sm backdrop-blur-sm">
+                  {(['rcv', 'funerario', 'patrimoniales'] as const).map((p) => {
+                    const active = product.id === p || (p === 'patrimoniales' && product.id === 'bien');
+                    const labels: Record<string, string> = {
+                      rcv: 'RCV',
+                      funerario: 'Funerario',
+                      patrimoniales: 'Patrimonial',
+                    };
+                    return (
+                      <button
+                        key={p}
+                        type="button"
+                        onClick={() => {
+                          persistProductFromHints({ product: p });
+                          window.location.search = `?product=${p}${localStep === 3 ? '&step=3' : ''}`;
+                        }}
+                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${active
+                            ? 'bg-[#0F1A5A] text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                          }`}
+                        title={`Probar flujo ${labels[p]}`}
+                      >
+                        {labels[p]}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             </header>
 
             <section key={localStep} className="surface-card overflow-hidden step-enter">
-              <div className="p-6 sm:p-8 lg:p-10">
+              <div className="p-4 sm:p-8 lg:p-10">
                 {!cotizadorRcv && localStep === 2 && <EmissionStep />}
-                {(cotizadorRcv || localStep === 3) && (usesFuneralStep() ? <FuneralStep /> : usesVehicleStep() ? <VehicleStep /> : null)}
+                {(cotizadorRcv || localStep === 3) && (
+                  usesFuneralStep() ? (
+                    <FuneralStep />
+                  ) : usesPatrimonialesStep() || isPatrimoniales() ? (
+                    <PatrimonialesStep />
+                  ) : usesVehicleStep() ? (
+                    <VehicleStep />
+                  ) : null
+                )}
               </div>
 
               {!hideFooterBar && (
@@ -259,7 +342,7 @@ export default function App() {
         </main>
       </div>
 
-      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 py-3 bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
+      <div className="md:hidden fixed bottom-0 left-0 right-0 z-50 px-4 pt-3 pb-[max(0.75rem,env(safe-area-inset-bottom))] bg-white/95 backdrop-blur-md border-t border-slate-200 shadow-[0_-8px_24px_rgba(15,23,42,0.08)]">
         <div className="flex gap-2">
           {!cotizadorRcv && localStep === 3 && (
             <Button variant="secondary" className="flex-1" onClick={() => navigate(2)}>

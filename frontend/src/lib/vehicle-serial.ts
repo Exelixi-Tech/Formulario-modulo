@@ -1,11 +1,21 @@
-/** Paridad SysIP vehicle-form: required + maxlength 18 (sin mínimo VIN 17). */
-export const VEHICLE_SERIAL_MAX_LEN = 18;
+/** Tope de captura del serial de carrocería en el formulario RCV. */
+export const VEHICLE_SERIAL_MAX_LEN = 20;
+
+/** Serial de motor en el formulario RCV (tope de captura). */
+export const MOTOR_SERIAL_MAX_LEN = 20;
 
 export function normalizeVehicleSerial(raw: string): string {
   return String(raw || '')
     .replace(/[^a-zA-Z0-9]/g, '')
     .toUpperCase()
     .slice(0, VEHICLE_SERIAL_MAX_LEN);
+}
+
+export function normalizeMotorSerial(raw: string): string {
+  return String(raw || '')
+    .replace(/[^a-zA-Z0-9]/g, '')
+    .toUpperCase()
+    .slice(0, MOTOR_SERIAL_MAX_LEN);
 }
 
 export function validateVehicleSerialMessage(serial?: string | null): string | undefined {
