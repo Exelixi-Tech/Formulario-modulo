@@ -1,6 +1,6 @@
 import { Fragment, useState } from 'react';
 import {
-  Check, ChevronLeft, ChevronRight, FileText, UserCog, ShieldCheck, CreditCard, Car, Users,
+  Check, ChevronLeft, ChevronRight, FileText, UserCog, ShieldCheck, CreditCard, Car, Users, Building2,
 } from 'lucide-react';
 import {
   canNavigateToStep,
@@ -50,7 +50,9 @@ export function TopStepper() {
           ? [{ n: 3, label: 'Vehículo', Icon: Car }]
           : product.useFuneralStep
             ? [{ n: 3, label: 'Personas', Icon: Users }]
-            : []),
+            : product.usesPatrimonialesStep || product.usesBienStep
+              ? [{ n: 3, label: 'Patrimonial', Icon: Building2 }]
+              : []),
         { n: 4, label: 'Plan', Icon: ShieldCheck },
         { n: 5, label: 'Pago', Icon: CreditCard },
       ]
@@ -59,9 +61,11 @@ export function TopStepper() {
         { n: 2, label: product.hasVehicle ? 'Emisión' : 'Tomador', Icon: UserCog },
         ...(product.hasVehicle
           ? [{ n: 3, label: 'Vehículo', Icon: Car }]
-          : product.id === 'funerario'
-            ? []
-            : [{ n: 3, label: 'Asegurado', Icon: Users }]),
+          : product.id === 'patrimoniales' || product.id === 'bien' || product.usesPatrimonialesStep || product.usesBienStep
+            ? [{ n: 3, label: 'Patrimonial', Icon: Building2 }]
+            : product.id === 'funerario'
+              ? []
+              : [{ n: 3, label: 'Asegurado', Icon: Users }]),
         { n: 4, label: 'Plan', Icon: ShieldCheck },
         { n: 5, label: 'Pago', Icon: CreditCard },
       ];
@@ -71,9 +75,7 @@ export function TopStepper() {
     ? [3]
     : product.exelixiCatalog
       ? [2, 3]
-      : product.id === 'funerario'
-        ? [2]
-        : [2, 3];
+      : [2, 3];
   const EXELIXI_LOCAL_STEPS = LOCAL_STEPS;
 
   function bridgeNavAvailable(): boolean {
@@ -125,7 +127,7 @@ export function TopStepper() {
     ? (STEPS[STEPS.length - 1]?.n ?? 2)
     : 5;
   const canPrev = prevStep != null && !navigating && canGoTo(prevStep);
-  const nextTarget = product.id === 'funerario' && step === 2 ? 4 : step + 1;
+  const nextTarget = step + 1;
   const canNext = step < maxStep && !navigating && canGoTo(nextTarget);
 
   return (

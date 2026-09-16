@@ -5,7 +5,14 @@ import { IdentityInput } from '../../components/ui/IdentityInput';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { useCatalogs } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
-import { getProductId } from '../../lib/product';
+import { getProductConfig, getProductId } from '../../lib/product';
+import { fetchFuneralPlanes } from '../../lib/api';
+import {
+  additionalParentescos,
+  ageErrorForParentesco,
+  unionAdditionalParentescos,
+  type PlanParentesco,
+} from '../../lib/funeralPlanParentescos';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
 import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
 import { formatTelefono, validateRequiredVePhone } from '../../lib/phone';
@@ -193,7 +200,7 @@ function PersonFields({
 }
 
 export function FuneralStep() {
-  const { tomador, asegurado, funeral, setFuneral, sameInsured } = useWizardStore();
+  const { tomador, asegurado, funeral, setFuneral, sameInsured, selectedPlan } = useWizardStore();
 
   const producto = getProductId();
   const { config } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -224,18 +231,50 @@ export function FuneralStep() {
     asegurado.sexo,
     asegurado.telefono,
     asegurado.email,
+    asegurado.estadoCivil,
+    asegurado.cestado,
+    asegurado.cciudad,
+    asegurado.direccion,
+    asegurado.peso,
+    asegurado.estatura,
+    tomador.estadoCivil,
+    tomador.cestado,
+    tomador.cciudad,
+    tomador.direccion,
   ]);
   const catalogs = useCatalogs();
-  const [asegErrors, setAsegErrors] = useState<PersonErrors[]>([]);
+  const [, setAsegErrors] = useState<PersonErrors[]>([]);
   const [benefErrors, setBenefErrors] = useState<PersonErrors[]>([]);
-  const [cedulaChecking, setCedulaChecking] = useState<Record<number, boolean>>({});
+  const [, setCedulaChecking] = useState<Record<number, boolean>>({});
+  const [planParentescos, setPlanParentescos] = useState<PlanParentesco[]>([]);
   const lastAsegCedula = useRef<Record<number, string>>({});
   const lastAsegOk = useRef<Record<number, boolean>>({});
+  const productCfg = getProductConfig();
 
-  const parentescoOptions =
+  useEffect(() => {
+    let cancelled = false;
+    fetchFuneralPlanes(productCfg.cramo || 9)
+      .then((planes) => {
+        if (cancelled) return;
+        const fromSelected = selectedPlan?.cplan
+          ? planes.find((p) => String(p.cplan) === String(selectedPlan.cplan))
+          : undefined;
+        const list = fromSelected?.parentescos?.length
+          ? additionalParentescos(fromSelected.parentescos)
+          : selectedPlan?.parentescos?.length
+            ? additionalParentescos(selectedPlan.parentescos)
+            : unionAdditionalParentescos(planes);
+        setPlanParentescos(list);
+      })
+      .catch(() => {
+        if (!cancelled) setPlanParentescos(selectedPlan?.parentescos ?? []);
+      });
+    return () => { cancelled = true; };
+  }, [productCfg.cramo, selectedPlan?.cplan, selectedPlan?.parentescos]);
+
+  const catalogFallback =
     catalogs.parentescos.length > 0
       ? catalogs.parentescos
-          // El titular (código 1) se asigna automáticamente; no se ofrece aquí.
           .filter((p) => String(p.code) !== '1')
           .map((p) => ({ value: String(p.code), label: p.label }))
       : [
@@ -247,24 +286,13 @@ export function FuneralStep() {
           { value: '7', label: 'Hermano (a)' },
         ];
 
+  const parentescoOptions = planParentescos.length
+    ? planParentescos.map((p) => ({ value: String(p.cparen), label: p.xparentesco }))
+    : catalogFallback;
+
   const sexoOptions = catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }));
 
   // ── Helpers de listas ─────────────────────────────────────────────────────
-  const updateAsegurado = (idx: number, patch: Partial<FuneralPerson>) => {
-    if (patch.identificacion != null) lastAsegCedula.current[idx] = '';
-    const next = funeral.asegurados.map((a, i) => (i === idx ? { ...a, ...patch } : a));
-    setFuneral({ asegurados: next });
-  };
-  const addAsegurado = () =>
-    setFuneral({
-      asegurados: [
-        ...funeral.asegurados,
-        { tipoDoc: 'V', identificacion: '', nombre: '', apellido: '', fechaNac: '', sexo: '', parentesco: '' },
-      ],
-    });
-  const removeAsegurado = (idx: number) =>
-    setFuneral({ asegurados: funeral.asegurados.filter((_, i) => i !== idx) });
-
   const updateBeneficiario = (idx: number, patch: Partial<FuneralPerson>) => {
     const next = funeral.beneficiarios.map((b, i) => (i === idx ? { ...b, ...patch } : b));
     setFuneral({ beneficiarios: next });
@@ -282,6 +310,8 @@ export function FuneralStep() {
   // ── Validación ──────────────────────────────────────────────────────────
   const validatePerson = (p: FuneralPerson, isTitular: boolean): PersonErrors => {
     const e: PersonErrors = {};
+    if (isTitular) return e;
+
     const req = (v?: string) => !(v ?? '').trim();
     const len = (v?: string) => (v ?? '').trim().length;
 
@@ -312,6 +342,12 @@ export function FuneralStep() {
 
     if (req(p.sexo)) e.sexo = 'Selecciona el sexo';
     if (!isTitular && req(p.parentesco)) e.parentesco = 'Selecciona el parentesco';
+    const ageErr = ageErrorForParentesco(
+      p.fechaNac,
+      isTitular ? '1' : p.parentesco,
+      selectedPlan?.parentescos ?? planParentescos,
+    );
+    if (ageErr) e.fechaNac = ageErr;
 
     const phoneErr = validateRequiredVePhone(p.telefono);
     if (phoneErr) e.telefono = phoneErr;
@@ -326,6 +362,7 @@ export function FuneralStep() {
   };
 
   const checkAseguradoCedula = useCallback(async (idx: number, identificacion: string) => {
+    if (idx === 0) return true;
     const digits = String(identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return true;
     if (lastAsegCedula.current[idx] === digits) {
@@ -359,10 +396,14 @@ export function FuneralStep() {
       );
       return true;
     } catch {
-      lastAsegCedula.current[idx] = '';
-      lastAsegOk.current[idx] = false;
-      toast.warning('No se pudo verificar la cédula', 'Inténtalo de nuevo antes de continuar.', 4000);
-      return false;
+      lastAsegCedula.current[idx] = digits;
+      lastAsegOk.current[idx] = true;
+      toast.warning(
+        'No se pudo verificar la cédula',
+        'Puedes continuar. Revisa la cédula si el sistema no respondió.',
+        4000,
+      );
+      return true;
     } finally {
       setCedulaChecking((s) => ({ ...s, [idx]: false }));
     }
@@ -383,18 +424,23 @@ export function FuneralStep() {
   }, [funeral.asegurados, checkAseguradoCedula]);
 
   const validate = async (): Promise<boolean> => {
-    const aErr = funeral.asegurados.map((p, i) => validatePerson(p, i === 0));
+    const titular = funeral.asegurados[0];
+    if (!titular) {
+      toast.warning('No se puede guardar', 'Falta el titular.', 5000);
+      return false;
+    }
+    const aErr = [validatePerson(titular, true)];
 
     setAsegErrors(aErr);
     setBenefErrors([]);
 
-    const hasPersonError = aErr.some((e) => Object.keys(e).length > 0);
-    if (hasPersonError) return false;
-
-    for (let i = 0; i < funeral.asegurados.length; i++) {
-      const ok = await checkAseguradoCedula(i, funeral.asegurados[i].identificacion);
-      if (!ok) return false;
+    const firstErr = aErr.find((e) => Object.keys(e).length > 0);
+    if (firstErr) {
+      const msg = Object.values(firstErr)[0] || 'Revisa los datos del titular.';
+      toast.warning('No se puede guardar', msg, 5000);
+      return false;
     }
+
     return true;
   };
 
@@ -407,62 +453,29 @@ export function FuneralStep() {
       <SectionCard
         Icon={Users}
         title="Personas aseguradas"
-        description="El titular ya viene del paso 2. Aquí solo agregas otras personas cubiertas."
+        description="El titular ya viene del paso 2. Los adicionales se agregan al elegir el plan."
       >
         <div className="space-y-5">
-          {funeral.asegurados.map((aseg, idx) => (
+          {funeral.asegurados.slice(0, 1).map((aseg, idx) => (
             <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4">
               <div className="flex items-center justify-between mb-3">
                 <span className="text-[0.7rem] font-black uppercase tracking-wider text-indigo-600">
-                  {idx === 0 ? 'Titular' : `Asegurado ${idx + 1}`}
+                  Titular
                 </span>
-                {idx > 0 && (
-                  <button
-                    type="button"
-                    onClick={() => removeAsegurado(idx)}
-                    className="inline-flex items-center gap-1 text-[0.7rem] font-bold text-rose-500 hover:text-rose-600"
-                  >
-                    <Trash2 size={12} /> Quitar
-                  </button>
-                )}
               </div>
-              {idx === 0 ? (
-                <p className="text-sm text-slate-600 leading-relaxed">
-                  <span className="font-semibold text-slate-800">
-                    {aseg.nombre} {aseg.apellido}
-                  </span>
-                  {aseg.identificacion ? ` · ${aseg.tipoDoc || 'V'}-${aseg.identificacion}` : ''}
-                  <span className="block text-[0.78rem] text-slate-500 mt-1">
-                    {sameInsured !== false
-                      ? 'Es la misma persona del tomador. No hay que volver a cargar los datos.'
-                      : 'Datos cargados en el paso 2. No hay que volver a llenarlos.'}
-                  </span>
-                </p>
-              ) : (
-                <PersonFields
-                  person={aseg}
-                  errors={asegErrors[idx] ?? {}}
-                  isTitular={false}
-                  parentescoOptions={parentescoOptions}
-                  sexoOptions={sexoOptions}
-                  loading={catalogs.loading}
-                  identityLoading={Boolean(cedulaChecking[idx])}
-                  onChange={(patch) => updateAsegurado(idx, patch)}
-                  onIdentificacionBlur={(id) => {
-                    void checkAseguradoCedula(idx, id);
-                  }}
-                />
-              )}
+              <p className="text-sm text-slate-600 leading-relaxed">
+                <span className="font-semibold text-slate-800">
+                  {aseg.nombre} {aseg.apellido}
+                </span>
+                {aseg.identificacion ? ` · ${aseg.tipoDoc || 'V'}-${aseg.identificacion}` : ''}
+                <span className="block text-[0.78rem] text-slate-500 mt-1">
+                  {sameInsured !== false
+                    ? 'Es la misma persona del tomador. No hay que volver a cargar los datos.'
+                    : 'Datos cargados en el paso 2. No hay que volver a llenarlos.'}
+                </span>
+              </p>
             </div>
           ))}
-
-          <button
-            type="button"
-            onClick={addAsegurado}
-            className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-indigo-200 text-indigo-600 text-sm font-bold hover:border-indigo-400 hover:bg-indigo-50/50 transition-all"
-          >
-            <Plus size={15} /> Agregar asegurado
-          </button>
         </div>
       </SectionCard>
       )}

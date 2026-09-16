@@ -6,6 +6,16 @@ function digits(v?: string): string {
   return String(v ?? '').replace(/\D/g, '');
 }
 
+/** Cédula VE: DD/MM/YYYY → YYYY-MM-DD. ISO se deja igual. */
+function toIsoFechaNac(raw?: string | null): string {
+  const s = String(raw ?? '').trim();
+  if (!s) return '';
+  if (/^\d{4}-\d{2}-\d{2}/.test(s)) return s.slice(0, 10);
+  const m = s.match(/^(\d{1,2})[/\-.](\d{1,2})[/\-.](\d{4})$/);
+  if (!m) return s;
+  return `${m[3]}-${m[2].padStart(2, '0')}-${m[1].padStart(2, '0')}`;
+}
+
 function personFromOcr(ocr?: OcrResult | null): FuneralPerson | null {
   if (!ocr) return null;
   const identificacion = digits(ocr.identificacion);
@@ -15,10 +25,49 @@ function personFromOcr(ocr?: OcrResult | null): FuneralPerson | null {
     identificacion,
     nombre: ocr.nombre ?? '',
     apellido: ocr.apellido ?? '',
-    fechaNac: ocr.fechaNacimiento ?? '',
+    fechaNac: toIsoFechaNac(ocr.fechaNacimiento),
     sexo: ocr.sexo ?? '',
     parentesco: '',
   };
+}
+
+export type FuneralOcrRole = 'tomador' | 'asegurado' | 'beneficiario';
+
+/** Identidad leída del OCR (sin teléfono/dirección). Vacío si no hay documento. */
+export function funeralOcrIdentityPatch(role: FuneralOcrRole): {
+  tipoDoc?: string;
+  identificacion?: string;
+  nombre?: string;
+  apellido?: string;
+  fechaNac?: string;
+  sexo?: string;
+  estadoCivil?: string;
+} {
+  const { documents } = useWizardStore.getState();
+  const ocr =
+    role === 'tomador'
+      ? documents.cedula?.ocr
+      : role === 'asegurado'
+        ? documents.cedula_titular?.ocr
+        : documents.cedula_beneficiario?.ocr;
+  const person = personFromOcr(ocr);
+  if (!person) return {};
+  const out: Record<string, string> = {};
+  if (person.tipoDoc) out.tipoDoc = person.tipoDoc;
+  if (person.identificacion) out.identificacion = person.identificacion;
+  if (person.nombre) out.nombre = person.nombre;
+  if (person.apellido) out.apellido = person.apellido;
+  if (person.fechaNac) out.fechaNac = person.fechaNac;
+  if (person.sexo) out.sexo = person.sexo;
+  if (ocr?.estadoCivil) out.estadoCivil = ocr.estadoCivil;
+  return out;
+}
+
+export function funeralRoleFromPrefix(prefix: string): FuneralOcrRole | null {
+  if (prefix === 'tom_') return 'tomador';
+  if (prefix === 'aseg_') return 'asegurado';
+  if (prefix === 'benef_') return 'beneficiario';
+  return null;
 }
 
 /** Precarga tomador, titular y primer beneficiario (100 %) desde el OCR funerario. */

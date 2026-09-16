@@ -28,6 +28,13 @@ export interface ProprietaryInfo {
   nestatura?: number;
 }
 
+function metricFromSis(v: number | string | undefined | null): string | undefined {
+  if (v == null || v === '') return undefined;
+  const n = Number(String(v).replace(',', '.'));
+  if (!Number.isFinite(n) || n <= 0) return undefined;
+  return String(v).trim();
+}
+
 export interface PersonFormPatch {
   tipoDoc?: string;
   identificacion?: string;
@@ -45,6 +52,8 @@ export interface PersonFormPatch {
   direccion?: string;
   xprofesion?: string;
   xactividad?: string;
+  peso?: string;
+  estatura?: string;
 }
 
 function labelFromCatalog(
@@ -131,6 +140,11 @@ export function mapProprietaryToPerson(
     xactividad: clipPersonField('nombre', String(info.xactividad ?? '').trim()) || undefined,
   };
 
+  const peso = metricFromSis(info.npeso);
+  const estatura = metricFromSis(info.nestatura);
+  if (peso) patch.peso = peso;
+  if (estatura) patch.estatura = estatura;
+
   if (tipoDoc) patch.tipoDoc = tipoDoc.slice(0, PERSON_FIELD_LIMITS.tipoDoc);
   if (Number.isFinite(cestado)) patch.cestado = cestado;
   if (Number.isFinite(cciudad)) patch.cciudad = cciudad;
@@ -141,22 +155,54 @@ export function mapProprietaryToPerson(
   return patch;
 }
 
+function hasPersonFieldValue(val: unknown): boolean {
+  if (val == null) return false;
+  if (typeof val === 'string') return val.trim() !== '';
+  if (typeof val === 'number') return Number.isFinite(val);
+  return true;
+}
+
+/** Sis2000 automático: contacto/ubicación. Nunca identidad (eso lo pone el OCR o el usuario). */
+const SIS2000_CONTACT_KEYS: Array<keyof PersonFormPatch> = [
+  'telefono',
+  'email',
+  'estado',
+  'cestado',
+  'ciudad',
+  'cciudad',
+  'direccion',
+  'xprofesion',
+  'xactividad',
+  'peso',
+  'estatura',
+];
+
 /**
- * Fusiona autofill Sis2000 sin pisar datos ya ingresados por el usuario.
- * Solo aplica valores no vacíos del patch entrante.
+ * Solo huecos de contacto. No copia nombre, apellido, fecha, sexo ni cédula.
+ */
+export function sis2000EmptyFill(
+  current: PersonFormPatch,
+  incoming: PersonFormPatch,
+): PersonFormPatch {
+  const fill: PersonFormPatch = {};
+  for (const key of SIS2000_CONTACT_KEYS) {
+    const val = incoming[key];
+    if (!hasPersonFieldValue(val)) continue;
+    if (hasPersonFieldValue(current[key])) continue;
+    (fill as Record<string, unknown>)[key] = val;
+  }
+  return fill;
+}
+
+/**
+ * Fusiona autofill Sis2000 sin pisar OCR ni datos ya ingresados.
+ * Solo rellena claves vacías del formulario actual.
  */
 export function mergeNonEmptyPersonPatch(
   current: PersonFormPatch,
   incoming: PersonFormPatch,
 ): PersonFormPatch {
-  const out: PersonFormPatch = { ...current };
-  for (const [key, val] of Object.entries(incoming) as Array<[keyof PersonFormPatch, unknown]>) {
-    if (val == null) continue;
-    if (typeof val === 'string' && val.trim() === '') continue;
-    if (typeof val === 'number' && !Number.isFinite(val)) continue;
-    (out as Record<string, unknown>)[key] = val;
-  }
-  return out;
+  return { ...current, ...sis2000EmptyFill(current, incoming) };
 }
 
 /** CID Sis2000 típico: letra de documento + número (ej. V18456329). */
