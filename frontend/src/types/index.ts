@@ -106,6 +106,12 @@ export type PersonData = {
   direccion?: string;
 };
 
+export interface ProveedorItem {
+  xproveedor: string;
+  cci_rif: number | string;
+  [key: string]: unknown;
+}
+
 export interface Plan {
   /** Código del plan en Sis2000 (ej. "RCVBAS", "Auto"). Se envía al backend en quote/emit. */
   cplan?: string;
@@ -119,6 +125,9 @@ export interface Plan {
   sumaAsegurada: number;
   /** Sufijo opcional para la suma asegurada (ej. "/unidad") */
   sumaAseguradaUnit?: string;
+  cramo?: number;
+  centidad?: number;
+  citem?: number;
 }
 
 export type PaymentMethod = 'card' | 'transfer' | 'mobile' | 'otp';
@@ -260,6 +269,10 @@ export interface WizardState {
   vehicle: VehicleData;
   category: string;
   selectedPlan: Plan | null;
+  /** Proveedor de servicio seleccionado (plan-proveedor) */
+  selectedProveedor?: ProveedorItem | null;
+  /** Código o RIF del proveedor de servicio (se envía como { cproveedor: cci_rif }) */
+  cproveedor?: number | string | null;
   paymentMethod: PaymentMethod;
   policy: IssuedPolicy | null;
   /** Cotizacion vigente desde La Mundial (mprima/mprimaext/ptasa). */
