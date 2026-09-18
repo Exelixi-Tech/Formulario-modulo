@@ -17,9 +17,11 @@ import { continueToEmisionCotizador, isCotizadorFlow } from './lib/cotizador-flo
 import type { ExelixiWizardHandoff } from './lib/exelixi-wizard-handoff';
 import { syncTitularFromTomador } from './lib/funeral-sync';
 import { toast } from './store/toastStore';
-import { ChevronLeft, ChevronRight, Sparkles, ShieldCheck } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Sparkles, ShieldCheck, KeyRound, Layers, Sliders } from 'lucide-react';
 import { useProductConfig } from './hooks/useProductConfig';
 import { useUiFlags } from './lib/ui-flags';
+import { TokenManagerModal } from './components/TokenManagerModal';
+import { isTokenAuthEnabled } from './lib/token-manager';
 
 const EMPRESA_ID = Number(import.meta.env.VITE_EMPRESA_ID ?? 1);
 
@@ -101,11 +103,21 @@ function getStepMeta(product: ReturnType<typeof getProductConfig>, localStep: 2 
 }
 
 import { FormularioConfigPanel } from './config/FormularioConfigPanel';
+import { PlanProveedorValidationView } from './features/plan-proveedor';
 
 export default function App() {
   if (window.location.pathname === '/config') {
     return <FormularioConfigPanel />;
   }
+
+  if (
+    window.location.pathname === '/plan-proveedor' ||
+    window.location.pathname === '/test-plan-proveedor' ||
+    new URLSearchParams(window.location.search).get('view') === 'plan-proveedor'
+  ) {
+    return <PlanProveedorValidationView />;
+  }
+
 
   const { goTo, setMetadataCanal } = useWizardStore();
   const step = useWizardStore((s) => s.step);
@@ -200,6 +212,15 @@ export default function App() {
     }
   }
 
+  const [showTokenModal, setShowTokenModal] = useState(false);
+  const [tokensEnabled, setTokensEnabled] = useState(isTokenAuthEnabled());
+
+  useEffect(() => {
+    const handleSync = () => setTokensEnabled(isTokenAuthEnabled());
+    window.addEventListener('nexus_token_state_changed', handleSync);
+    return () => window.removeEventListener('nexus_token_state_changed', handleSync);
+  }, []);
+
   const meta = cotizadorRcv
     ? {
         eyebrow: 'Paso 01 · Vehículo',
@@ -225,16 +246,58 @@ export default function App() {
             <header className="mb-8 animate-fade-in">
               <div className="flex items-start justify-between gap-4 flex-wrap">
                 <div className="min-w-0">
-                  <p className="text-[0.68rem] font-black tracking-[0.22em] gradient-text-indigo uppercase mb-2 inline-flex items-center gap-1.5">
-                    <Sparkles size={11} className="text-indigo-500" />
-                    {meta.eyebrow}
-                  </p>
+                  <div className="flex items-center gap-2 mb-2 flex-wrap">
+                    <p className="text-[0.68rem] font-black tracking-[0.22em] gradient-text-indigo uppercase inline-flex items-center gap-1.5">
+                      <Sparkles size={11} className="text-indigo-500" />
+                      {meta.eyebrow}
+                    </p>
+                    <button
+                      type="button"
+                      onClick={() => setShowTokenModal(true)}
+                      className={`text-[0.6rem] font-black uppercase px-2 py-0.5 rounded-full border tracking-wider transition-all hover:scale-105 inline-flex items-center gap-1 cursor-pointer ${
+                        tokensEnabled
+                          ? 'bg-indigo-50 text-indigo-700 border-indigo-200'
+                          : 'bg-emerald-50 text-emerald-700 border-emerald-200'
+                      }`}
+                    >
+                      <KeyRound size={10} />
+                      {tokensEnabled ? 'Con Tokens · Nexus' : 'Sin Tokens · Directo'}
+                    </button>
+                  </div>
                   <h1 className="font-display text-[1.7rem] sm:text-[2.5rem] font-black text-slate-900 tracking-tight leading-tight">
                     {meta.title}
                   </h1>
                   <p className="text-slate-500 text-sm mt-2 max-w-xl leading-relaxed">
                     {meta.sub}
                   </p>
+                </div>
+
+                {/* Quick actions for tokens and views */}
+                <div className="flex items-center gap-2 flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setShowTokenModal(true)}
+                    className="px-3 py-1.5 rounded-xl border border-slate-200 bg-white/80 hover:bg-white text-xs font-bold text-slate-700 shadow-sm transition-all inline-flex items-center gap-1.5"
+                  >
+                    <KeyRound size={13} className="text-indigo-600" />
+                    <span>Control Tokens</span>
+                  </button>
+
+                  <a
+                    href="/plan-proveedor"
+                    className="px-3 py-1.5 rounded-xl border border-indigo-200 bg-indigo-50/80 hover:bg-indigo-100/80 text-xs font-bold text-indigo-700 shadow-sm transition-all inline-flex items-center gap-1.5"
+                  >
+                    <Layers size={13} />
+                    <span>Validador Plan-Proveedor</span>
+                  </a>
+
+                  <a
+                    href="/config"
+                    className="p-1.5 rounded-xl border border-slate-200 bg-white/80 hover:bg-white text-slate-600 shadow-sm transition-all inline-flex items-center"
+                    title="Configuración"
+                  >
+                    <Sliders size={15} />
+                  </a>
                 </div>
               </div>
             </header>
@@ -284,6 +347,17 @@ export default function App() {
           </Button>
         </div>
       </div>
+
+      <TokenManagerModal
+        isOpen={showTokenModal}
+        onClose={() => setShowTokenModal(false)}
+        onNavigateToView={(view) => {
+          setShowTokenModal(false);
+          if (view === 'validador') window.location.href = '/plan-proveedor';
+          if (view === 'config') window.location.href = '/config';
+          if (view === 'wizard') window.location.href = '/';
+        }}
+      />
     </div>
   );
 }
