@@ -103,29 +103,20 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
   return children;
 }
 
-import { PlanProveedorValidationView } from './features/plan-proveedor/PlanProveedorValidationView.tsx'
-
 // /config (dev) o /formulario/config (prod con prefijo Apache)
 const isConfigRoute = /\/config\/?$/.test(window.location.pathname);
 
-// /plan-proveedor o /test-plan-proveedor o ?view=plan-proveedor (vista de validación sin tokens)
-const isPlanProveedorRoute =
-  /\/(plan-proveedor|test-plan-proveedor|validador-plan-proveedor)\/?$/i.test(window.location.pathname) ||
-  new URLSearchParams(window.location.search).get('view') === 'plan-proveedor';
-
 createRoot(document.getElementById('root')!).render(
   <StrictMode>
-    {isConfigRoute ? (
-      <FormularioConfigPanel />
-    ) : isPlanProveedorRoute ? (
-      <PlanProveedorValidationView />
-    ) : (
-      <NexusGuard recheckInterval={30}>
-        <ExelixiHandoffBootstrap>
-          <App />
-        </ExelixiHandoffBootstrap>
-      </NexusGuard>
-    )}
+    {isConfigRoute
+      ? <FormularioConfigPanel />
+      : (
+        <NexusGuard recheckInterval={30}>
+          <ExelixiHandoffBootstrap>
+            <App />
+          </ExelixiHandoffBootstrap>
+        </NexusGuard>
+      )
+    }
   </StrictMode>,
 )
-
