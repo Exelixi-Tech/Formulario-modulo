@@ -22,6 +22,7 @@ const valrepRoutes   = require('./routes/valrep');
 const emissionsRoutes = require('./routes/emissions');
 const personasRoutes = require('./routes/personas');
 const nexusAuth      = require('./middleware/nexusAuth');
+const { reportExpressError } = require('./services/monitorReporter');
 
 const app = express();
 
@@ -56,8 +57,9 @@ app.use('/api/valrep',   nexusAuth, valrepRoutes);
 app.use('/api/emissions', nexusAuth, emissionsRoutes);
 app.use('/api/personas', nexusAuth, personasRoutes);
 
-app.use((err, _req, res, _next) => {
+app.use((err, req, res, _next) => {
   console.error('[modulo-formulario] error:', err);
+  reportExpressError(err, req);
   res.status(err.status || 500).json({
     success: false, code: err.code || 'INTERNAL', message: err.message,
   });
