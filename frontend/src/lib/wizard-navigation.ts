@@ -1,5 +1,4 @@
 import type { DocType } from '../types';
-import { getProductId } from './product';
 
 export interface WizardNavSnapshot {
   step: number;
@@ -13,9 +12,9 @@ const DEFAULT_REQUIRED: DocType[] = ['cedula', 'certificado'];
 
 /** Documentos obligatorios por producto cuando no hay config de admin. */
 export function getDefaultRequiredDocs(productId: string): DocType[] {
-  return productId === 'funerario'
-    ? ['cedula', 'cedula_titular', 'cedula_beneficiario']
-    : DEFAULT_REQUIRED;
+  if (productId === 'funerario') return ['cedula', 'cedula_titular', 'cedula_beneficiario'];
+  if (productId === 'patrimoniales') return ['cedula'];
+  return DEFAULT_REQUIRED;
 }
 
 /** Indica si los documentos OCR obligatorios están procesados. */
@@ -47,10 +46,7 @@ export function canNavigateToStep(
 
   if (targetStep >= 5 && !hasPlanSelected(snapshot)) return false;
 
-  if (targetStep > currentStep && targetStep > currentStep + 1) {
-    const skipAsegurados = getProductId() === 'funerario' && currentStep === 2 && targetStep === 4;
-    if (!skipAsegurados) return false;
-  }
+  if (targetStep > currentStep && targetStep > currentStep + 1) return false;
 
   if (targetStep > currentStep) {
     const maxForward = getMaxForwardStep(snapshot);
@@ -71,7 +67,6 @@ export function getMaxForwardStep(snapshot: WizardNavSnapshot): number {
 export function getPreviousAllowedStep(currentStep: number): number | null {
   if (currentStep <= 1) return null;
   if (currentStep === 5) return 4;
-  if (currentStep === 4 && getProductId() === 'funerario') return 2;
   return currentStep - 1;
 }
 

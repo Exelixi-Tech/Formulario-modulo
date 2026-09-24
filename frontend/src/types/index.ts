@@ -10,7 +10,7 @@ export type DocType =
 export type { DiligenciaState, TipoDiligencia } from '../lib/diligencia';
 
 /** Producto de seguro que se está suscribiendo en el flujo. */
-export type ProductId = 'rcv' | 'funerario';
+export type ProductId = 'rcv' | 'funerario' | 'patrimoniales';
 
 export type DocStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -83,6 +83,8 @@ export type TomadorData = {
   xprofesion?: string;
   xactividad?: string;
   itipoDiligencia?: 'S' | 'C';
+  peso?: string;
+  estatura?: string;
 };
 
 export type PersonData = {
@@ -104,7 +106,18 @@ export type PersonData = {
   ciudad?: string;
   cciudad?: number;
   direccion?: string;
+  /** Peso en kg (maclient.npeso). */
+  peso?: string;
+  /** Estatura en metros (maclient.nestatura). */
+  estatura?: string;
 };
+
+export interface PlanParentesco {
+  cparen: number;
+  xparentesco: string;
+  min_edad: number;
+  max_edad: number;
+}
 
 export interface Plan {
   /** Código del plan en Sis2000 (ej. "RCVBAS", "Auto"). Se envía al backend en quote/emit. */
@@ -119,6 +132,8 @@ export interface Plan {
   sumaAsegurada: number;
   /** Sufijo opcional para la suma asegurada (ej. "/unidad") */
   sumaAseguradaUnit?: string;
+  /** Parentescos admitidos por el plan (GET/POST personas/planes). */
+  parentescos?: PlanParentesco[];
 }
 
 export type PaymentMethod = 'card' | 'transfer' | 'mobile' | 'otp';
@@ -143,6 +158,16 @@ export interface FuneralPerson {
   pporcen?: number;
   telefono?: string;
   email?: string;
+  estadoCivil?: string;
+  estado?: string;
+  cestado?: number;
+  ciudad?: string;
+  cciudad?: number;
+  direccion?: string;
+  /** Peso en kg (maclient.npeso). */
+  peso?: string;
+  /** Estatura en metros (maclient.nestatura). */
+  estatura?: string;
 }
 
 /**
@@ -166,6 +191,13 @@ export interface FuneralData {
   healthAnswers?: Record<string, unknown>;
   /** true cuando el cuestionario fue completado. */
   healthQuestionnaireDone?: boolean;
+}
+
+/** Datos del bien asegurado (producto patrimoniales). */
+export interface PatrimonialesData {
+  datosBien: string;
+  tipo: string;
+  descripcion: string;
 }
 
 export interface VehicleData {
@@ -247,6 +279,8 @@ export interface WizardState {
   tomador: TomadorData;
   /** Datos del producto Funerario (personas). Solo se usa si product = 'funerario'. */
   funeral: FuneralData;
+  /** Datos del bien (patrimoniales). */
+  patrimoniales: PatrimonialesData;
   sameInsured: boolean;
   asegurado: PersonData;
   /** True cuando quien rellena el formulario NO es quien va a pagar la póliza. */

@@ -7,6 +7,7 @@ import type {
   PersonData,
   VehicleData,
   FuneralData,
+  PatrimonialesData,
   FuneralPerson,
   Plan,
   PaymentMethod,
@@ -73,6 +74,12 @@ const defaultFuneralPerson = (parentesco = ''): FuneralPerson => ({
   parentesco,
 });
 
+const defaultPatrimoniales = (): PatrimonialesData => ({
+  datosBien: '',
+  tipo: '',
+  descripcion: '',
+});
+
 const defaultFuneral = (): FuneralData => ({
   // El primer asegurado es el titular (parentesco=1).
   asegurados: [defaultFuneralPerson('1')],
@@ -102,6 +109,7 @@ interface WizardActions {
   setConductor: (data: Partial<PersonData>) => void;
   setVehicle: (data: Partial<VehicleData>) => void;
   setFuneral: (data: Partial<FuneralData>) => void;
+  setPatrimoniales: (data: Partial<PatrimonialesData>) => void;
   setCategory: (c: string) => void;
   setSelectedPlan: (plan: Plan | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
@@ -129,6 +137,7 @@ const initialState: WizardState = {
   ocrDone: false,
   tomador: defaultTomador(),
   funeral: defaultFuneral(),
+  patrimoniales: defaultPatrimoniales(),
   sameInsured: true,
   asegurado: defaultPerson(),
   differentPayer: false,
@@ -216,6 +225,9 @@ export const useWizardStore = create<WizardState & WizardActions>()((set) => ({
 
   setFuneral: (data) =>
     set((s) => ({ funeral: { ...s.funeral, ...data } })),
+
+  setPatrimoniales: (data) =>
+    set((s) => ({ patrimoniales: { ...s.patrimoniales, ...data } })),
 
   setCategory: (category) => set({ category, selectedPlan: null }),
 

@@ -35,7 +35,35 @@ import {
 } from './sso-metadata';
 import { persistFlowHandoff } from './flow-handoff';
 import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-flow';
+import { toast } from '../store/toastStore';
 
+function isPagosModuleUrl(url: string): boolean {
+  try {
+    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+    if (host.startsWith('pagos.')) return true;
+    if (path.includes('/pagos')) return true;
+    if (u.port === '5184' || u.port === '5180') return true;
+    return false;
+  } catch {
+    return /pagos/i.test(url);
+  }
+}
+
+function isEmisionModuleUrl(url: string): boolean {
+  try {
+    const u = new URL(url, typeof window !== 'undefined' ? window.location.origin : 'http://localhost');
+    const host = u.hostname.toLowerCase();
+    const path = u.pathname.toLowerCase();
+    if (host.startsWith('emision.')) return true;
+    if (path.includes('/emision')) return true;
+    if (u.port === '5183') return true;
+    return false;
+  } catch {
+    return /emision/i.test(url);
+  }
+}
 // ── Configuración por puerto (dev local) o hostname (HTTPS sslip.io) ───────
 const PORT_TO_ORDER: Record<string, number> = {
   '5181': 1, // OCR
@@ -226,7 +254,7 @@ function makeBridge(): BridgeAPI {
     const isCatalogFlow = isExelixiCatalogFlow();
     const prod = sessionStorage.getItem('exelixi_product') || 'rcv';
     if (!isCatalogFlow) {
-      if (prod === 'funerario') {
+      if (prod === 'funerario' || prod === 'patrimoniales') {
         delete out.vehicle;
       } else if (prod === 'rcv') {
         delete out.funeral;
@@ -303,7 +331,7 @@ function makeBridge(): BridgeAPI {
         // Propaga el producto (rcv | funerario) entre módulos: getProductConfig()
         // lo lee desde sessionStorage, así no depende de que la URL lo arrastre.
         const sessionProduct = r.data.data.product;
-        if (sessionProduct === 'rcv' || sessionProduct === 'funerario') {
+        if (sessionProduct === 'rcv' || sessionProduct === 'funerario' || sessionProduct === 'patrimoniales') {
           try { sessionStorage.setItem('exelixi_product', sessionProduct); } catch { /* ignore */ }
         }
         if (r.data.data.exelixiCatalogFlow) {
@@ -350,6 +378,27 @@ function makeBridge(): BridgeAPI {
       const out = r?.data;
       if (out?.nextUrl) {
         let target = out.nextUrl as string;
+        // Funerario/patrimoniales: Formulario → Emisión → Pagos. Si la cadena Nexus
+        // no tiene Emisión activa, done() salta a Pagos (paso 5) y rompe el flujo.
+        try {
+          const product = sessionStorage.getItem('exelixi_product') || '';
+          if (
+            (product === 'funerario' || product === 'patrimoniales')
+            && isPagosModuleUrl(target)
+            && !isEmisionModuleUrl(target)
+          ) {
+            console.error(
+              '[bridge] avance bloqueado: nextUrl es Pagos sin Emisión (cadena Nexus incompleta)',
+              { product, target, from: order },
+            );
+            toast.error(
+              'Cadena incompleta',
+              'Nexus no tiene Emisión entre Formulario y Pagos. Revisa el módulo funerario en Admin (submódulos activos).',
+              12000,
+            );
+            return { finished: false };
+          }
+        } catch { /* ignore */ }
         if (isExelixiCatalogFlow()) {
           try {
             const url = new URL(target, window.location.origin);

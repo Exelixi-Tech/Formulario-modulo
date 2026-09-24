@@ -12,7 +12,7 @@ import { applyOcrPersonRoles } from './ocr-person-roles';
 import { applyFuneralOcrCedulas } from './funeral-ocr-apply';
 import { toDiligenciaDocTypes, type DiligenciaDocType } from './diligencia';
 import type { PersonData } from '../types';
-import { persistTarjetaMetadataCanal } from './rcv-tarjeta-flow';
+import { persistTarjetaMetadataCanal, resolveTipoPlacaForTarjetaFlow } from './rcv-tarjeta-flow';
 import { useWizardStore } from '../store/wizardStore';
 
 export type BuilderProductBranch =
@@ -52,7 +52,7 @@ export function isExelixiCatalogFlowHint(hints?: {
   if (hints?.url) {
     try {
       const parsed = new URL(hints.url, window.location.origin);
-      if (parsed.searchParams.get('product') === 'rcv' || parsed.searchParams.get('product') === 'funerario') {
+      if (parsed.searchParams.get('product') === 'rcv' || parsed.searchParams.get('product') === 'funerario' || parsed.searchParams.get('product') === 'patrimoniales') {
         return false;
       }
       const flow = parsed.searchParams.get('flow');
@@ -85,7 +85,7 @@ export function isExelixiCatalogFlow(): boolean {
     const flow = params.get('flow');
     if (flow === 'exelixi-catalog' || flow === 'exelixi') return true;
     const product = params.get('product');
-    if (product === 'rcv' || product === 'funerario') return false;
+    if (product === 'rcv' || product === 'funerario' || product === 'patrimoniales') return false;
     if (isExelixiCatalogEntryPath()) return true;
   } catch {
     /* ignore */
@@ -98,7 +98,7 @@ export function ensureExelixiFlowQueryParam(active: boolean): void {
   if (!active || isExelixiCatalogFlow()) return;
   try {
     const url = new URL(window.location.href);
-    if (url.searchParams.get('product') === 'rcv' || url.searchParams.get('product') === 'funerario') {
+    if (url.searchParams.get('product') === 'rcv' || url.searchParams.get('product') === 'funerario' || url.searchParams.get('product') === 'patrimoniales') {
       return;
     }
     url.searchParams.set('flow', 'exelixi-catalog');
@@ -214,6 +214,9 @@ function metadataFromTarjetaHandoff(
     nombre_producto:
       tarjeta.nombreProducto
       ?? (raw.nombre_producto != null ? String(raw.nombre_producto) : undefined),
+    ...(tarjeta.nfactura
+      ? { nfactura: String(tarjeta.nfactura).replace(/\D/g, '').slice(0, 16) }
+      : {}),
   };
 }
 
@@ -304,7 +307,7 @@ export function applyExelixiOcrHandoff(
       serialMotor: normalizeMotorSerial(sanitizeOcrField(cert.serialMotor)),
       cilindrada: rcvHandoff ? cert.cilindrada ?? '' : '',
       tipoCarnet: rcvHandoff ? cert.tipoCarnet : undefined,
-      tipoPlaca: resolveOcrTipoPlaca(cert),
+      tipoPlaca: resolveTipoPlacaForTarjetaFlow(resolveOcrTipoPlaca(cert)),
     });
   }
 

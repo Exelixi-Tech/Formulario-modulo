@@ -9,7 +9,8 @@ import { Button } from './components/ui/Button';
 import { EmissionStep } from './features/emission/EmissionStep';
 import { VehicleStep } from './features/vehicle/VehicleStep';
 import { FuneralStep } from './features/funeral/FuneralStep';
-import { getProductConfig, isFunerario, isRcv, persistProductFromHints, skipsPersonasStep, usesFuneralStep, usesVehicleStep } from './lib/product';
+import { PatrimonialesStep } from './features/patrimoniales';
+import { getProductConfig, isFunerario, isPatrimoniales, isRcv, persistProductFromHints, skipsPersonasStep, usesFuneralStep, usesVehicleStep } from './lib/product';
 import { applyMetadataFromNexusToken } from './lib/nexus-token-client';
 import { mergeMarketplaceActorMetadata } from './lib/sso-metadata';
 import { continueToEmisionModule } from './lib/exelixi-catalog';
@@ -46,7 +47,7 @@ function buildCotizadorSnapshot(): Partial<ExelixiWizardHandoff> {
   return { vehicle: snap.vehicle, ocrDone: true };
 }
 
-const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario', Record<2 | 3, StepMeta>> = {
+const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario' | 'patrimoniales', Record<2 | 3, StepMeta>> = {
   rcv: {
     2: {
       eyebrow: 'Paso 02 · Emisión',
@@ -68,7 +69,19 @@ const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario', Record<2 | 3, StepMeta>>
     3: {
       eyebrow: 'Paso 03 · Personas',
       title: 'Personas aseguradas',
-      sub: 'El titular ya está cargado. Agrega solo otras personas cubiertas si aplica.',
+      sub: 'El titular ya está cargado. Los adicionales se agregan al elegir el plan.',
+    },
+  },
+  patrimoniales: {
+    2: {
+      eyebrow: 'Paso 02 · Tomador',
+      title: 'Información del cliente',
+      sub: 'Verifica los datos detectados y completa lo que falte.',
+    },
+    3: {
+      eyebrow: 'Paso 03 · Bien',
+      title: 'Datos del bien',
+      sub: 'Describe el inmueble o bien que se va a asegurar.',
     },
   },
 };
@@ -111,7 +124,7 @@ export default function App() {
     applyMetadataFromNexusToken('nexus_access_token_formulario', (metadata) => {
       const current = useWizardStore.getState().metadataCanal || {};
       setMetadataCanal(mergeMarketplaceActorMetadata({ ...current, ...metadata }));
-      if (metadata.product === 'funerario' || metadata.product === 'rcv') {
+      if (metadata.product) {
         persistProductFromHints({ product: String(metadata.product) });
       }
     });
@@ -123,13 +136,8 @@ export default function App() {
   const { hideStepper, hideFooterBar } = useUiFlags(config);
 
   useEffect(() => {
-    if (isFunerario() && step === 3) {
-      setLocalStep(2);
-      goTo(2);
-      return;
-    }
     if (step === 2 || step === 3) setLocalStep(step);
-  }, [step, goTo]);
+  }, [step]);
 
   function navigate(to: 2 | 3) {
     setLocalStep(to);
@@ -189,7 +197,9 @@ export default function App() {
         '¡Formulario completado!',
         product.hasVehicle
           ? 'Datos del cliente y vehículo guardados correctamente.'
-          : 'Datos del cliente y las personas guardados correctamente.',
+          : isPatrimoniales()
+            ? 'Datos del cliente y del bien guardados correctamente.'
+            : 'Datos del cliente y las personas guardados correctamente.',
       );
       if (product.exelixiCatalog) {
         continueToEmisionModule(buildExelixiWizardSnapshot());
@@ -243,7 +253,7 @@ export default function App() {
             <section key={localStep} className="surface-card overflow-hidden step-enter">
               <div className="p-4 sm:p-8 lg:p-10">
                 {!cotizadorRcv && localStep === 2 && <EmissionStep />}
-                {(cotizadorRcv || localStep === 3) && (usesFuneralStep() ? <FuneralStep /> : usesVehicleStep() ? <VehicleStep /> : null)}
+                {(cotizadorRcv || localStep === 3) && (usesFuneralStep() ? <FuneralStep /> : usesVehicleStep() ? <VehicleStep /> : isPatrimoniales() ? <PatrimonialesStep /> : null)}
               </div>
 
               {!hideFooterBar && (

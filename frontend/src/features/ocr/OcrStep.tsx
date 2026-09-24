@@ -6,6 +6,7 @@ import {
 } from 'lucide-react';
 import { adjustDocsForBinacionalCarnet, isBinacionalCarnet } from '../../lib/ocr-binacional';
 import { resolveOcrTipoPlaca } from '../../lib/vehicle-carnet-labels';
+import { resolveTipoPlacaForTarjetaFlow, shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 import { useWizardStore } from '../../store/wizardStore';
 import { uploadDocument, DocTypeMismatchError } from '../../lib/api';
 import { toast } from '../../store/toastStore';
@@ -58,8 +59,8 @@ const DOCS: DocConfig[] = [
   },
   {
     type: 'certificado',
-    label: 'Certificado del vehículo',
-    description: 'Vehículo a asegurar',
+    label: 'Carnet de circulación y/o título de propiedad',
+    description: 'Documento vehicular INTT · carnet o título',
     Icon: FileText,
     accent: 'from-blue-500 to-indigo-500',
   },
@@ -563,6 +564,7 @@ export function OcrStep() {
   const certOcr = documents.certificado?.ocr;
 
   useEffect(() => {
+    if (shouldUseTarjetaPublicApi()) return;
     if (!certOcr || documents.certificado?.status !== 'done') return;
     if (!isBinacionalCarnet(certOcr)) return;
     setVehicle({ tipoPlaca: 'binacional' });
@@ -592,7 +594,7 @@ export function OcrStep() {
           año: cert.año ?? '',
           color: cert.color ?? '',
           serial: cert.serial ?? '',
-          tipoPlaca: resolveOcrTipoPlaca(cert),
+          tipoPlaca: resolveTipoPlacaForTarjetaFlow(resolveOcrTipoPlaca(cert)),
         });
       }
       setOcrDone(true);
