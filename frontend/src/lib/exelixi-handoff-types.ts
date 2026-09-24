@@ -61,6 +61,8 @@ export interface ExelixiOcrHandoff {
     ccanalalt?: number | null;
     cramo?: string | null;
     bfactura?: 0 | 1;
+    /** Número de factura (flujo tarjeta / skip payment). */
+    nfactura?: string | number | null;
     xcodigoUnico?: string;
     ctarjeta?: number | null;
     nombreProducto?: string | null;
