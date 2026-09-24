@@ -11,6 +11,7 @@ import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
 import { getProductId, isFunerario, isRcvLaMundialFlow, usesFuneralStep } from '../../lib/product';
 import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
+import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import {
   diligenciaLabel,
   isPersonaJuridica,
@@ -183,6 +184,7 @@ export function EmissionStep() {
     beneficiario, setBeneficiario,
     funeral, setFuneral,
     diligencia, setDiligencia,
+    metadataCanal,
   } = useWizardStore();
 
   const catalogs = useCatalogs();
@@ -196,6 +198,10 @@ export function EmissionStep() {
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
   const ciudadesState = useCiudades(tomador.cestado);
   const aseguradoCiudades = useCiudades(asegurado.cestado);
+  /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
+  const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
+  /** Solo consulta adpoliza (titular/asegurado). No afecta campos del formulario funerario. */
+  const checkPolizaVigente = (isFunerario() || usesFuneralStep()) && !skipPolizaVigente;
 
   useEffect(() => {
     if (!isRcvEmision) return;
@@ -475,9 +481,9 @@ export function EmissionStep() {
   );
 
   // Tomador = pagador: solo se valida póliza vigente si también es el titular (sameInsured).
-  // Si solo paga, puede figurar en infinitas pólizas; se valida el asegurado/titular.
+  // Viajero: checkPolizaVigente=false. Si solo paga, no se bloquea.
   useEffect(() => {
-    if (!checkFuneralFlow || sameInsured === false) {
+    if (!checkPolizaVigente || sameInsured === false) {
       lastFuneralCedula.current['tom_'] = '';
       lastFuneralOk.current['tom_'] = true;
       setErrors((prev) => {
@@ -500,7 +506,7 @@ export function EmissionStep() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
-    checkFuneralFlow,
+    checkPolizaVigente,
     sameInsured,
     tomador.identificacion,
     tomador.tipoDoc,
@@ -509,7 +515,7 @@ export function EmissionStep() {
   ]);
 
   useEffect(() => {
-    if (!checkFuneralFlow || sameInsured) return;
+    if (!checkPolizaVigente || sameInsured) return;
     const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
@@ -523,7 +529,7 @@ export function EmissionStep() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
-    checkFuneralFlow,
+    checkPolizaVigente,
     sameInsured,
     asegurado.identificacion,
     asegurado.tipoDoc,
@@ -690,8 +696,9 @@ export function EmissionStep() {
       }
     }
 
-    if (checkFuneralFlow) {
+    if (checkPolizaVigente) {
       // Solo titulares/asegurados: el tomador-pagador no se bloquea por póliza vigente.
+      // Viajero: checkPolizaVigente=false.
       if (sameInsured !== false) {
         const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
         if (!tomOk) return false;

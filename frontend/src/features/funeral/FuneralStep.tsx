@@ -15,6 +15,7 @@ import {
 } from '../../lib/funeralPlanParentescos';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
 import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
+import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import { formatTelefono, validateRequiredVePhone } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
 import {
@@ -200,7 +201,9 @@ function PersonFields({
 }
 
 export function FuneralStep() {
-  const { tomador, asegurado, funeral, setFuneral, sameInsured, selectedPlan } = useWizardStore();
+  const { tomador, asegurado, funeral, setFuneral, sameInsured, selectedPlan, metadataCanal } =
+    useWizardStore();
+  const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
 
   const producto = getProductId();
   const { config } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -363,6 +366,7 @@ export function FuneralStep() {
 
   const checkAseguradoCedula = useCallback(async (idx: number, identificacion: string) => {
     if (idx === 0) return true;
+    if (skipPolizaVigente) return true;
     const digits = String(identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return true;
     if (lastAsegCedula.current[idx] === digits) {
@@ -407,9 +411,10 @@ export function FuneralStep() {
     } finally {
       setCedulaChecking((s) => ({ ...s, [idx]: false }));
     }
-  }, []);
+  }, [skipPolizaVigente]);
 
   useEffect(() => {
+    if (skipPolizaVigente) return;
     const timers: number[] = [];
     funeral.asegurados.forEach((p, idx) => {
       if (idx === 0) return;
@@ -421,7 +426,7 @@ export function FuneralStep() {
       timers.push(t);
     });
     return () => timers.forEach((id) => window.clearTimeout(id));
-  }, [funeral.asegurados, checkAseguradoCedula]);
+  }, [funeral.asegurados, checkAseguradoCedula, skipPolizaVigente]);
 
   const validate = async (): Promise<boolean> => {
     const titular = funeral.asegurados[0];
