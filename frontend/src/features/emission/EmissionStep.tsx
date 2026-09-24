@@ -437,8 +437,19 @@ export function EmissionStep() {
     [checkFuneralCedula, lookupByCedula],
   );
 
+  // Tomador = pagador: solo se valida póliza vigente si también es el titular (sameInsured).
+  // Si solo paga, puede figurar en infinitas pólizas; se valida el asegurado/titular.
   useEffect(() => {
-    if (!checkFuneralFlow) return;
+    if (!checkFuneralFlow || sameInsured === false) {
+      lastFuneralCedula.current['tom_'] = '';
+      lastFuneralOk.current['tom_'] = true;
+      setErrors((prev) => {
+        if (!prev.tom_identificacion) return prev;
+        const { tom_identificacion: _r, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
     const digits = String(tomador.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
@@ -451,7 +462,14 @@ export function EmissionStep() {
       );
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [checkFuneralFlow, tomador.identificacion, tomador.tipoDoc, runFuneralCedulaAuto, setTomador]);
+  }, [
+    checkFuneralFlow,
+    sameInsured,
+    tomador.identificacion,
+    tomador.tipoDoc,
+    runFuneralCedulaAuto,
+    setTomador,
+  ]);
 
   useEffect(() => {
     if (!checkFuneralFlow || sameInsured) return;
@@ -621,9 +639,11 @@ export function EmissionStep() {
     }
 
     if (checkFuneralFlow) {
-      const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
-      if (!tomOk) return false;
-      if (!sameInsured) {
+      // Solo titulares/asegurados: el tomador-pagador no se bloquea por póliza vigente.
+      if (sameInsured !== false) {
+        const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
+        if (!tomOk) return false;
+      } else {
         const asegOk = await checkFuneralCedula('aseg_', asegurado.identificacion);
         if (!asegOk) return false;
       }
@@ -661,7 +681,9 @@ export function EmissionStep() {
             : checkFuneralFlow
               ? lookupLoading[prefix]
                 ? 'Consultando Sis2000…'
-                : 'Al completar la cédula se consulta si se puede asegurar y se cargan los datos'
+                : prefix === 'tom_' && sameInsured === false
+                  ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
+                  : 'Al completar la cédula se consulta si se puede asegurar'
               : undefined
         }
       >
@@ -700,7 +722,7 @@ export function EmissionStep() {
                   }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-              : checkFuneralFlow
+              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
                 ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
