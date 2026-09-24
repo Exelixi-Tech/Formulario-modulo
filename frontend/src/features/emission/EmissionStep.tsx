@@ -279,6 +279,9 @@ export function EmissionStep() {
       _current: PersonFormPatch,
       setPerson: (patch: PersonFormPatch) => void,
     ) => {
+      // Funerario / personas: no consultar propietary RCV (placa/dueño).
+      if (isFunerario() || usesFuneralStep()) return;
+
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 1) return;
 
