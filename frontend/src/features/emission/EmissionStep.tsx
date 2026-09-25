@@ -69,6 +69,19 @@ function emptyFuneralBeneficiario(pporcen = 100): FuneralPerson {
   };
 }
 
+/** Hay datos de beneficiario (OCR o captura). Un renglón vacío no obliga el paso. */
+function funeralBeneficiarioTieneDatos(b: FuneralPerson | undefined): boolean {
+  if (!b) return false;
+  return Boolean(
+    (b.identificacion ?? '').trim()
+    || (b.nombre ?? '').trim()
+    || (b.apellido ?? '').trim()
+    || (b.fechaNac ?? '').trim()
+    || (b.parentesco ?? '').trim()
+    || (b.sexo ?? '').trim(),
+  );
+}
+
 function parseBodyMetric(v: unknown): number | null {
   if (v == null || v === '') return null;
   const n = Number(String(v).replace(',', '.'));
@@ -310,21 +323,21 @@ export function EmissionStep() {
   useEffect(() => {
     if (!checkFuneralFlow) return;
     if ((funeral.beneficiarios ?? []).length > 0) return;
-    const fromOcr = beneficiario.identificacion || beneficiario.nombre
-      ? {
-          tipoDoc: beneficiario.tipoDoc || 'V',
-          identificacion: beneficiario.identificacion,
-          nombre: beneficiario.nombre,
-          apellido: beneficiario.apellido,
-          fechaNac: beneficiario.fechaNac ?? '',
-          sexo: beneficiario.sexo ?? '',
-          parentesco: beneficiario.parentesco ?? '',
-          pporcen: beneficiario.pporcen ?? 100,
-          telefono: beneficiario.telefono ?? '',
-          email: beneficiario.email ?? '',
-        }
-      : emptyFuneralBeneficiario(100);
-    setFuneral({ beneficiarios: [fromOcr] });
+    if (!(beneficiario.identificacion || beneficiario.nombre)) return;
+    setFuneral({
+      beneficiarios: [{
+        tipoDoc: beneficiario.tipoDoc || 'V',
+        identificacion: beneficiario.identificacion,
+        nombre: beneficiario.nombre,
+        apellido: beneficiario.apellido,
+        fechaNac: beneficiario.fechaNac ?? '',
+        sexo: beneficiario.sexo ?? '',
+        parentesco: beneficiario.parentesco ?? '',
+        pporcen: beneficiario.pporcen ?? 100,
+        telefono: beneficiario.telefono ?? '',
+        email: beneficiario.email ?? '',
+      }],
+    });
     setHasBeneficiary(true);
   }, [checkFuneralFlow, funeral.beneficiarios, beneficiario, setFuneral, setHasBeneficiary]);
 
@@ -662,11 +675,11 @@ export function EmissionStep() {
     }
     if (checkFuneralFlow) {
       const bens = funeral.beneficiarios ?? [];
-      if (bens.length === 0) {
-        e.funeral_benef = 'Agrega al menos un beneficiario';
-      }
       let pctSum = 0;
+      let filled = 0;
       bens.forEach((b, i) => {
+        if (!funeralBeneficiarioTieneDatos(b)) return;
+        filled += 1;
         const idErr = validateSecondaryPersonIdentificacion(b.identificacion);
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
@@ -681,7 +694,7 @@ export function EmissionStep() {
           pctSum += pct;
         }
       });
-      if (bens.length > 0 && pctSum !== 100) {
+      if (filled > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
     } else if (hasBeneficiary && !tarjetaFlow) {
@@ -695,7 +708,11 @@ export function EmissionStep() {
     }
 
     if (checkFuneralFlow) {
-      const first = (funeral.beneficiarios ?? [])[0];
+      const filledBens = (funeral.beneficiarios ?? []).filter(funeralBeneficiarioTieneDatos);
+      if (filledBens.length !== (funeral.beneficiarios ?? []).length) {
+        setFuneral({ beneficiarios: filledBens });
+      }
+      const first = filledBens[0];
       if (first) {
         setHasBeneficiary(true);
         setBeneficiario({
@@ -710,6 +727,8 @@ export function EmissionStep() {
           telefono: first.telefono,
           email: first.email,
         });
+      } else {
+        setHasBeneficiary(false);
       }
     }
 
@@ -1035,7 +1054,7 @@ export function EmissionStep() {
           <SectionCard
             Icon={Heart}
             title="Beneficiarios"
-            description="El porcentaje de todos debe sumar 100% (como en Sis2000 pporce)."
+            description="Opcional. Si no cargó la cédula del beneficiario, puede continuar. Si agrega uno, el porcentaje debe sumar 100%."
             statusLabel={errors.funeral_benef_pct || errors.funeral_benef}
             statusTone={errors.funeral_benef_pct || errors.funeral_benef ? 'warning' : 'neutral'}
           >
@@ -1046,19 +1065,17 @@ export function EmissionStep() {
                     <span className="text-[0.7rem] font-black uppercase tracking-wider text-fuchsia-600">
                       Beneficiario {idx + 1}
                     </span>
-                    {idx > 0 && (
-                      <button
-                        type="button"
-                        className="text-[0.7rem] font-bold text-rose-500"
-                        onClick={() =>
-                          setFuneral({
-                            beneficiarios: funeral.beneficiarios.filter((_, i) => i !== idx),
-                          })
-                        }
-                      >
-                        Quitar
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="text-[0.7rem] font-bold text-rose-500"
+                      onClick={() =>
+                        setFuneral({
+                          beneficiarios: (funeral.beneficiarios ?? []).filter((_, i) => i !== idx),
+                        })
+                      }
+                    >
+                      Quitar
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                     <Field anchor={`cli-fben_${idx}_parentesco`} label="Parentesco *" error={errors[`fben_${idx}_parentesco`]}>
