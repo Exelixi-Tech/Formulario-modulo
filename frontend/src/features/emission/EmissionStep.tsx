@@ -192,6 +192,7 @@ export function EmissionStep() {
   const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = isRcvLaMundialFlow() && !isCotizadorFlow();
   const producto = getProductId();
+  const skipBeneficiarioPreferencial = tarjetaFlow || producto === 'patrimoniales';
   const { config: formConfig } = useProductConfig(EMPRESA_ID, producto, 'formulario');
   const showProfesion = isRcvEmision && formConfig?.campos?.cprofesion?.activo !== false;
   const showActividad = isRcvEmision && formConfig?.campos?.cactividad?.activo !== false;
@@ -667,7 +668,7 @@ export function EmissionStep() {
       if (bens.length > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
-    } else if (hasBeneficiary && !tarjetaFlow) {
+    } else if (hasBeneficiary && !skipBeneficiarioPreferencial) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
 
@@ -1127,7 +1128,7 @@ export function EmissionStep() {
               </button>
             </div>
           </SectionCard>
-        ) : !tarjetaFlow ? (
+        ) : !skipBeneficiarioPreferencial ? (
           <SectionCard
             Icon={Heart}
             title="Datos del Beneficiario Preferencial"
