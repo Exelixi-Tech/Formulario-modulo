@@ -9,7 +9,7 @@ import { useCatalogs, useCiudades } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
-import { getProductId, isFunerario, isRcvLaMundialFlow, usesFuneralStep } from '../../lib/product';
+import { getProductId, isFunerario, isPatrimoniales, isRcvLaMundialFlow, usesFuneralStep, usesPatrimonialesStep } from '../../lib/product';
 import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
 import {
   diligenciaLabel,
@@ -235,6 +235,7 @@ export function EmissionStep() {
   /** true cuando el usuario editó la cédula a mano (no solo blur del OCR). */
   const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
+  const checkPatrimonialesFlow = isPatrimoniales() || usesPatrimonialesStep();
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
   const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
@@ -627,7 +628,7 @@ export function EmissionStep() {
   ]);
 
   useEffect(() => {
-    if (checkFuneralFlow || !hasBeneficiary) return;
+    if (checkFuneralFlow || checkPatrimonialesFlow || !hasBeneficiary) return;
     const digits = String(beneficiario.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
@@ -640,7 +641,7 @@ export function EmissionStep() {
       );
     }, 450);
     return () => window.clearTimeout(timer);
-  }, [checkFuneralFlow, hasBeneficiary, beneficiario.identificacion, beneficiario.tipoDoc, lookupByCedula, setBeneficiario]);
+  }, [checkFuneralFlow, checkPatrimonialesFlow, hasBeneficiary, beneficiario.identificacion, beneficiario.tipoDoc, lookupByCedula, setBeneficiario]);
 
   const validate = async () => {
     const e: ValidationErrors = {};
@@ -772,7 +773,7 @@ export function EmissionStep() {
       if (filled > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
-    } else if (hasBeneficiary && !tarjetaFlow) {
+    } else if (hasBeneficiary && !tarjetaFlow && !checkPatrimonialesFlow) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
 
@@ -1257,7 +1258,7 @@ export function EmissionStep() {
               </button>
             </div>
           </SectionCard>
-        ) : !tarjetaFlow ? (
+        ) : !tarjetaFlow && !checkPatrimonialesFlow ? (
           <SectionCard
             Icon={Heart}
             title="Datos del Beneficiario Preferencial"
