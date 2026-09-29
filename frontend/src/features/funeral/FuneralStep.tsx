@@ -14,7 +14,11 @@ import {
   type PlanParentesco,
 } from '../../lib/funeralPlanParentescos';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
-import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
+import {
+  cedulaTienePolizaVigente,
+  polizaVigenteCramo,
+  polizaVigenteLabel,
+} from '../../lib/funeral-cedula-check';
 import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import { formatTelefono, validateRequiredVePhone } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
@@ -204,6 +208,7 @@ export function FuneralStep() {
   const { tomador, asegurado, funeral, setFuneral, sameInsured, selectedPlan, metadataCanal } =
     useWizardStore();
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
+  const polizaCramo = polizaVigenteCramo(metadataCanal);
 
   const producto = getProductId();
   const { config } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -375,7 +380,7 @@ export function FuneralStep() {
     lastAsegCedula.current[idx] = digits;
     setCedulaChecking((s) => ({ ...s, [idx]: true }));
     try {
-      const res = await cedulaTienePolizaVigente(digits);
+      const res = await cedulaTienePolizaVigente(digits, polizaCramo);
       if (res.blocked) {
         lastAsegOk.current[idx] = false;
         setAsegErrors((prev) => {
@@ -386,8 +391,8 @@ export function FuneralStep() {
         toast.warning(
           'No se puede asegurar',
           res.cnpoliza
-            ? `Ya existe una póliza funeraria vigente (${res.cnpoliza}).`
-            : 'Esta cédula ya tiene una póliza funeraria activa. No se puede continuar.',
+            ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
+            : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
           8000,
         );
         return false;
@@ -395,7 +400,7 @@ export function FuneralStep() {
       lastAsegOk.current[idx] = true;
       toast.success(
         'Se puede asegurar',
-        'No hay póliza funeraria vigente para esta cédula.',
+        `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
         2800,
       );
       return true;
@@ -411,7 +416,7 @@ export function FuneralStep() {
     } finally {
       setCedulaChecking((s) => ({ ...s, [idx]: false }));
     }
-  }, [skipPolizaVigente]);
+  }, [skipPolizaVigente, polizaCramo]);
 
   useEffect(() => {
     if (skipPolizaVigente) return;
