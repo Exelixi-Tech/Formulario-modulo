@@ -63,6 +63,29 @@ router.get('/planes', async (req, res) => {
   }
 });
 
+/**
+ * Ramos donde buscar la póliza vigente. El SSO trae el ramo del producto (vida 47),
+ * pero las pólizas quedan en el ramo del plan (vida 1): se agregan los ramos de los
+ * planes del producto. Funerario (57 / sin producto) sigue solo en su ramo.
+ */
+async function ramosPolizaVigente(req, cramo) {
+  const meta = funeralCanalFromReq(req);
+  const cproducto = String(req.body?.cproducto ?? meta.cproducto ?? '').trim();
+  const ramos = [cramo];
+  if (!cproducto || cproducto === '57') return ramos;
+  if (String(meta.cproductor || '') === '80080') delete meta.cproductor;
+  try {
+    const planes = await getPlanesPersonas(cramo, { ...meta, cproducto });
+    for (const plan of planes) {
+      const n = Number(plan?.cramo);
+      if (Number.isInteger(n) && n > 0 && !ramos.includes(n)) ramos.push(n);
+    }
+  } catch (err) {
+    console.warn('[personas/poliza-vigente] planes del producto:', err instanceof Error ? err.message : err);
+  }
+  return ramos;
+}
+
 router.post('/poliza-vigente', async (req, res) => {
   const rif = String(req.body?.rif ?? req.body?.identificacion ?? '').replace(/\D/g, '');
   const cramo = req.body?.cramo != null ? Number(req.body.cramo) : 9;
@@ -77,7 +100,11 @@ router.post('/poliza-vigente', async (req, res) => {
   }
 
   try {
-    const result = await checkPolizaVigentePersonas({ rif, cramo });
+    let result = { hasVigente: false };
+    for (const ramo of await ramosPolizaVigente(req, cramo)) {
+      result = await checkPolizaVigentePersonas({ rif, cramo: ramo });
+      if (result.hasVigente) break;
+    }
     if (result.hasVigente) {
       return res.status(200).json({
         success: true,
