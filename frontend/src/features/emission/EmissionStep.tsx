@@ -34,6 +34,12 @@ import {
   SECONDARY_IDENTIFICACION_MAX_LENGTH,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
+import {
+  rcvIdentityKeepFromOcr,
+  resolveRcvOcrIdentDigits,
+  resolveRcvTitularTipoDocFromCert,
+  shouldRunRcvSis2000Lookup,
+} from '../../lib/rcv-titular-identity';
 import type { FuneralPerson } from '../../types';
 import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
@@ -233,9 +239,20 @@ export function EmissionStep() {
   const lastFuneralCedula = useRef<Record<string, string>>({});
   const lastFuneralOk = useRef<Record<string, boolean>>({});
   const ocrForced = useRef<Record<string, string>>({});
+  /** true cuando el usuario editó la cédula a mano (no solo blur del OCR). */
+  const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
+  const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
+
+  useEffect(() => {
+    if (!isRcvEmision || sameInsured !== false || !certOcr) return;
+    const expected = resolveRcvTitularTipoDocFromCert(certOcr);
+    if (asegurado.tipoDoc !== expected) {
+      setAsegurado({ tipoDoc: expected });
+    }
+  }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
 
   useEffect(() => {
     if (!checkFuneralFlow || sameInsured === false) return;
@@ -392,9 +409,15 @@ export function EmissionStep() {
               : store.beneficiario;
         const role = funeralRoleFromPrefix(prefix);
         const ocrIdentity = role ? funeralOcrIdentityPatch(role) : {};
+        const documents = useWizardStore.getState().documents;
+        // RCV: carnet/cédula OCR mandan en tipoDoc — Sis2000 ipersona no debe pisar (ej. E en maclient).
+        const rcvIdentityKeep =
+          isRcvEmision && (prefix === 'aseg_' || prefix === 'tom_')
+            ? rcvIdentityKeepFromOcr(prefix, latest, digits, documents)
+            : {};
         // OCR manda en identidad; Sis2000 solo rellena huecos (teléfono, dirección…).
         const fill = sis2000EmptyFill({ ...latest, ...ocrIdentity }, patch);
-        setPerson({ ...fill, ...ocrIdentity });
+        setPerson({ ...fill, ...ocrIdentity, ...rcvIdentityKeep });
 
         const ocrFecha = String(ocrIdentity.fechaNac ?? '').slice(0, 10);
         const sisFecha = String(patch.fechaNac ?? '').slice(0, 10);
@@ -658,12 +681,9 @@ export function EmissionStep() {
       });
     }
     if (checkFuneralFlow) {
-      const bens = funeral.beneficiarios ?? [];
+      const bens = (funeral.beneficiarios ?? []).filter(funeralBeneficiarioTieneDatos);
       let pctSum = 0;
-      let filled = 0;
       bens.forEach((b, i) => {
-        if (!funeralBeneficiarioTieneDatos(b)) return;
-        filled += 1;
         const idErr = validateSecondaryPersonIdentificacion(b.identificacion);
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
@@ -678,7 +698,7 @@ export function EmissionStep() {
           pctSum += pct;
         }
       });
-      if (filled > 0 && pctSum !== 100) {
+      if (bens.length > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
     } else if (hasBeneficiary && !skipBeneficiarioPreferencial) {
@@ -747,7 +767,17 @@ export function EmissionStep() {
         error={errors[`${prefix}identificacion`]}
         hint={
           isRcvEmision
-            ? 'Al salir del campo se buscan los datos en Sis2000'
+            ? (() => {
+                const ocrId = resolveRcvOcrIdentDigits(
+                  prefix,
+                  useWizardStore.getState().documents,
+                );
+                const cur = String(person.identificacion ?? '').replace(/\D/g, '');
+                if (ocrId && cur === ocrId && !manualIdentEdit.current[prefix]) {
+                  return 'Datos del OCR. Edite la cédula para buscar en Sis2000';
+                }
+                return 'Al salir del campo se buscan los datos en Sis2000';
+              })()
             : checkFuneralFlow
               ? lookupLoading[prefix]
                 ? 'Consultando Sis2000…'
@@ -773,11 +803,23 @@ export function EmissionStep() {
           onIdentificacionChange={(v) => {
             lastLookupCid.current[prefix] = '';
             lastFuneralCedula.current[prefix] = '';
+            manualIdentEdit.current[prefix] = true;
             setPerson({ identificacion: clipPersonField('identificacion', v) });
           }}
           onIdentificacionBlur={
             isRcvEmision
               ? (id) => {
+                  const docs = useWizardStore.getState().documents;
+                  const ocrIdent = resolveRcvOcrIdentDigits(prefix, docs);
+                  if (
+                    !shouldRunRcvSis2000Lookup(
+                      id,
+                      ocrIdent,
+                      Boolean(manualIdentEdit.current[prefix]),
+                    )
+                  ) {
+                    return;
+                  }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
               : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)

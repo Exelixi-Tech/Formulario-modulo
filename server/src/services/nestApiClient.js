@@ -3,6 +3,7 @@
  */
 const axios = require('axios');
 const { buildAuthHeaders } = require('./nestTokenService');
+const { getNestMonitorAppIdHeader } = require('./monitorReporter');
 
 /** @returns {string} Base URL de nest-api (:3002 en srv001). */
 function getBaseUrl() {
@@ -19,7 +20,10 @@ function getTimeout() {
 
 async function axiosOpts(extra = {}) {
   return {
-    headers: await buildAuthHeaders(),
+    headers: {
+      ...(await buildAuthHeaders()),
+      ...getNestMonitorAppIdHeader(),
+    },
     timeout: getTimeout(),
     ...extra,
   };

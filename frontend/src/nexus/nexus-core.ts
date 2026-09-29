@@ -130,6 +130,10 @@ function nexusApiCandidates(primary: string): string[] {
     if (t && !out.includes(t)) out.push(t);
   };
   push(primary);
+  // GCIA prod: solo subdominio nexus-api (sin fallback origin/nexus-api).
+  if (resolveProductionGciaNexusApi()) {
+    return out;
+  }
   if (typeof window !== 'undefined' && window.location.protocol === 'https:') {
     const origin = window.location.origin;
     const path = window.location.pathname.replace(/\/$/, '') || '/';
@@ -164,8 +168,6 @@ export async function verifyNexusAccess(nexusApiUrl: string): Promise<NexusVerif
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
-          'Cache-Control': 'no-cache',
-          Pragma: 'no-cache',
         },
       });
 

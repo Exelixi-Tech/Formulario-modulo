@@ -22,6 +22,49 @@ export function splitColombianOwnerName(full: string): { nombre: string; apellid
   };
 }
 
+/** Alineado con mapVenezuelanOwnerDocType del OCR (carnet INTT). */
+export function mapVenezuelanOwnerDocType(raw?: string | null): string | null {
+  const u = String(raw ?? '').toUpperCase().replace(/[\s.\-]/g, '').trim();
+  if (!u) return null;
+  if (u === 'J' || u.includes('NIT')) return 'J';
+  if (u === 'E' || u === 'CE' || u === 'EXTRANJ' || u === 'EXTRANJERO') return 'E';
+  if (u === 'P' || u === 'PASAPORTE') return 'P';
+  return 'V';
+}
+
+function inferTipoDocFromIdent(raw?: string | null): string | null {
+  const m = String(raw ?? '').trim().toUpperCase().match(/^([VEJGP])[-\s.]*\d/);
+  if (!m) return null;
+  return m[1] === 'G' ? 'J' : m[1];
+}
+
+/** Carnet colombiano en flujo VE → extranjero residente. */
+function mapColombianOwnerDocType(raw?: string | null): string | null {
+  const u = String(raw ?? '').toUpperCase().replace(/\./g, '').trim();
+  if (!u) return null;
+  if (u.includes('NIT') || u === 'J') return 'J';
+  if (u.includes('CC') || u.includes('CE') || u === 'C.C.' || u === 'C.E.') return 'E';
+  return mapVenezuelanOwnerDocType(raw);
+}
+
+export function resolveOwnerTipoDoc(cert: CertTomadorOcr): string {
+  const fromTipo = mapVenezuelanOwnerDocType(cert.tipoDoc);
+  if (fromTipo) return fromTipo;
+
+  if (cert.tipoDocPropietario) {
+    const fromProp =
+      mapColombianOwnerDocType(cert.tipoDocPropietario)
+      ?? mapVenezuelanOwnerDocType(cert.tipoDocPropietario);
+    if (fromProp) return fromProp;
+  }
+
+  const idRaw =
+    cert.identificacion
+    || cert.propietarioIdentificacion
+    || cert.identificacionPropietario;
+  return inferTipoDocFromIdent(idRaw) ?? 'V';
+}
+
 export function extractTomadorFromCertificado(cert?: CertTomadorOcr | null): {
   nombre: string;
   apellido: string;
@@ -48,12 +91,10 @@ export function extractTomadorFromCertificado(cert?: CertTomadorOcr | null): {
 
   if (!nombre && !apellido && !identificacion) return null;
 
-  let tipoDoc = cert.tipoDoc || 'E';
-  if (cert.tipoDocPropietario) {
-    const u = cert.tipoDocPropietario.toUpperCase();
-    if (u.includes('NIT') || u === 'J') tipoDoc = 'J';
-    else tipoDoc = 'E';
-  }
-
-  return { nombre, apellido, identificacion, tipoDoc };
+  return {
+    nombre,
+    apellido,
+    identificacion,
+    tipoDoc: resolveOwnerTipoDoc(cert),
+  };
 }
