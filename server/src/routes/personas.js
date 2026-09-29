@@ -66,6 +66,7 @@ router.get('/planes', async (req, res) => {
 router.post('/poliza-vigente', async (req, res) => {
   const rif = String(req.body?.rif ?? req.body?.identificacion ?? '').replace(/\D/g, '');
   const cramo = req.body?.cramo != null ? Number(req.body.cramo) : 9;
+  const tipoPoliza = cramo === 9 ? 'póliza funeraria vigente' : 'póliza vigente de este producto';
 
   if (rif.length < 6) {
     return res.status(400).json({
@@ -83,13 +84,13 @@ router.post('/poliza-vigente', async (req, res) => {
         blocked: true,
         code: 'PERSONAS_DUPLICATE',
         cnpoliza: result.cnpoliza,
-        message: 'Ya existe una póliza funeraria vigente para esta cédula.',
+        message: `Ya existe una ${tipoPoliza} para esta cédula.`,
       });
     }
     return res.json({
       success: true,
       blocked: false,
-      message: 'No hay póliza funeraria vigente para esta cédula.',
+      message: `No hay ${tipoPoliza} para esta cédula.`,
     });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

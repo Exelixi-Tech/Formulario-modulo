@@ -7,6 +7,8 @@ export function isViajeroPersonasCanal(
   if (!meta || typeof meta !== 'object') return false;
   const prod = String(meta.cproducto ?? '').trim();
   if (prod === '25' || prod === '26') return true;
+  // Accidentes personales (78/79) comparte ramo 5 con viajero pero sí valida póliza vigente.
+  if (prod === '78' || prod === '79') return false;
   const cramo = Number(meta.cramo);
   if (cramo === 5 || cramo === 25) return true;
   const label = `${meta.canal ?? ''} ${meta.nombre ?? ''}`.toLowerCase();

@@ -10,7 +10,11 @@ import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
 import { getProductId, isFunerario, isRcvLaMundialFlow, usesFuneralStep } from '../../lib/product';
-import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
+import {
+  cedulaTienePolizaVigente,
+  polizaVigenteCramo,
+  polizaVigenteLabel,
+} from '../../lib/funeral-cedula-check';
 import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import {
   diligenciaLabel,
@@ -220,6 +224,8 @@ export function EmissionStep() {
   const aseguradoCiudades = useCiudades(asegurado.cestado);
   /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
+  /** Ramo donde se busca la póliza vigente: el del producto que manda el SSO. */
+  const polizaCramo = polizaVigenteCramo(metadataCanal);
   /** Solo consulta adpoliza (titular/asegurado). No afecta campos del formulario funerario. */
   const checkPolizaVigente = (isFunerario() || usesFuneralStep()) && !skipPolizaVigente;
 
@@ -454,7 +460,7 @@ export function EmissionStep() {
       lastFuneralCedula.current[prefix] = digits;
       setLookupLoading((s) => ({ ...s, [prefix]: true }));
       try {
-        const res = await cedulaTienePolizaVigente(digits);
+        const res = await cedulaTienePolizaVigente(digits, polizaCramo);
         if (res.blocked) {
           lastFuneralOk.current[prefix] = false;
           setErrors((prev) => ({
@@ -464,8 +470,8 @@ export function EmissionStep() {
           toast.warning(
             'No se puede asegurar',
             res.cnpoliza
-              ? `Ya existe una póliza funeraria vigente (${res.cnpoliza}).`
-              : 'Esta cédula ya tiene una póliza funeraria activa. No se puede continuar.',
+              ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
+              : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
             8000,
           );
           return false;
@@ -479,7 +485,7 @@ export function EmissionStep() {
         });
         toast.success(
           'Se puede asegurar',
-          'No hay póliza funeraria vigente para esta cédula.',
+          `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
           2800,
         );
         return true;
@@ -496,7 +502,7 @@ export function EmissionStep() {
         setLookupLoading((s) => ({ ...s, [prefix]: false }));
       }
     },
-    [],
+    [polizaCramo],
   );
 
   const runFuneralCedulaAuto = useCallback(
