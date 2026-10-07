@@ -654,7 +654,7 @@ export function EmissionStep() {
       prefix: string,
       opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
     ) => {
-      const isJuridica = person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc);
+      const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
 
       if (opts?.secondaryIdent) {
         const idErr = validateSecondaryPersonIdentificacion(person.identificacion);
@@ -839,7 +839,7 @@ export function EmissionStep() {
     ciuState: any,
     opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
   ) => {
-    const isJuridica = person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc);
+    const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
 
     return (
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
