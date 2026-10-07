@@ -824,7 +824,7 @@ export function EmissionStep() {
               setPerson({ identificacion: clipPersonField('identificacion', v) });
             }}
             onIdentificacionBlur={
-              checkFuneralFlow
+              isRcvEmision
                 ? (id) => {
                   const docs = useWizardStore.getState().documents;
                   const ocrIdent = resolveRcvOcrIdentDigits(prefix, docs);
