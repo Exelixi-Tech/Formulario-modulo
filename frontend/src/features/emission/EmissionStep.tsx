@@ -56,6 +56,39 @@ function edadCumplida(iso?: string): number | null {
   return e >= 0 ? e : null;
 }
 
+function validateFecha(iso?: string, isJuridica = false): string | undefined {
+  const raw = String(iso || '').trim();
+  if (!raw) {
+    return isJuridica
+      ? 'La fecha de constitución es obligatoria'
+      : 'La fecha de nacimiento es obligatoria';
+  }
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) {
+    return 'Ingresa una fecha válida';
+  }
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (y < 1900) {
+    return 'El año no puede ser menor a 1900';
+  }
+  const dt = new Date(y, mo - 1, d);
+  if (
+    dt.getFullYear() !== y ||
+    dt.getMonth() + 1 !== mo ||
+    dt.getDate() !== d
+  ) {
+    return 'La fecha ingresada no es válida';
+  }
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (dt > today) {
+    return 'La fecha no puede ser mayor a hoy';
+  }
+  return undefined;
+}
+
 function emptyFuneralBeneficiario(pporcen = 100): FuneralPerson {
   return {
     tipoDoc: 'V',
@@ -704,11 +737,8 @@ export function EmissionStep() {
         e[`${prefix}email`] = `El correo no puede superar ${PERSON_FIELD_LIMITS.email} caracteres`;
       }
 
-      if (req(person.fechaNac)) {
-        e[`${prefix}fechaNac`] = isJuridica
-          ? 'La fecha de constitución es obligatoria'
-          : 'La fecha de nacimiento es obligatoria';
-      }
+      const fnacErr = validateFecha(person.fechaNac, isJuridica);
+      if (fnacErr) e[`${prefix}fechaNac`] = fnacErr;
 
       // SearchSelect usa cestado/cciudad; el texto estado/ciudad puede venir vacío del autofill
       const hasEstado =
@@ -768,7 +798,8 @@ export function EmissionStep() {
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
         if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
-        if (!(b.fechaNac ?? '').trim()) e[`fben_${i}_fnac`] = 'La fecha de nacimiento es obligatoria';
+        const fnacErr = validateFecha(b.fechaNac);
+        if (fnacErr) e[`fben_${i}_fnac`] = fnacErr;
         if (!(b.parentesco ?? '').trim()) e[`fben_${i}_parentesco`] = 'El parentesco es obligatorio';
         if (!(b.sexo ?? '').trim()) e[`fben_${i}_sexo`] = 'Selecciona el sexo';
         const pct = Number(b.pporcen);
@@ -1257,6 +1288,7 @@ export function EmissionStep() {
                         type="date"
                         value={ben.fechaNac ?? ''}
                         onChange={(ev) => patchFuneralBeneficiario(idx, { fechaNac: ev.target.value })}
+                        max={new Date().toISOString().split('T')[0]}
                       />
                     </Field>
                   </div>
