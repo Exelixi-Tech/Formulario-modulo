@@ -645,15 +645,15 @@ export function EmissionStep() {
         e[`${prefix}nombre`] = `El nombre no puede superar ${PERSON_FIELD_LIMITS.nombre} caracteres`;
       }
 
-      if (req(person.apellido)) {
-        e[`${prefix}apellido`] = 'El apellido es obligatorio';
-      } else if (len(person.apellido) < 2) {
-        e[`${prefix}apellido`] = 'El apellido debe tener al menos 2 caracteres';
-      } else if (len(person.apellido) > PERSON_FIELD_LIMITS.apellido) {
-        e[`${prefix}apellido`] = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
-      }
-
       if (!isJuridica) {
+        if (req(person.apellido)) {
+          e[`${prefix}apellido`] = 'El apellido es obligatorio';
+        } else if (len(person.apellido) < 2) {
+          e[`${prefix}apellido`] = 'El apellido debe tener al menos 2 caracteres';
+        } else if (len(person.apellido) > PERSON_FIELD_LIMITS.apellido) {
+          e[`${prefix}apellido`] = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
+        }
+
         if (req(person.sexo)) e[`${prefix}sexo`] = 'Selecciona el sexo';
         if (req(person.estadoCivil)) e[`${prefix}estadoCivil`] = 'Selecciona el estado civil';
       }
@@ -887,14 +887,16 @@ export function EmissionStep() {
             maxLength={PERSON_FIELD_LIMITS.nombre}
           />
         </Field>
-        <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
-          <Input
-            value={person.apellido ?? ''}
-            onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
-            placeholder="Apellido"
-            maxLength={PERSON_FIELD_LIMITS.apellido}
-          />
-        </Field>
+        {!isJuridica && (
+          <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
+            <Input
+              value={person.apellido ?? ''}
+              onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
+              placeholder="Apellido"
+              maxLength={PERSON_FIELD_LIMITS.apellido}
+            />
+          </Field>
+        )}
         <Field anchor={`cli-${prefix}telefono`} label="Teléfono *" error={errors[`${prefix}telefono`]} hint="11 dígitos · Digitel 0412/0422 · Movistar 0414/0424 · Movilnet 0416/0426 · fijos 02XX">
           <Input
             value={formatTelefono(person.telefono ?? '')}
