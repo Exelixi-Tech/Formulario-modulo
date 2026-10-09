@@ -9,7 +9,7 @@ import { useCatalogs, useCiudades } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
-import { getProductId, isFunerario, isRcvLaMundialFlow, usesFuneralStep } from '../../lib/product';
+import { getProductId, isFunerario, isPatrimoniales, isRcvLaMundialFlow, usesFuneralStep, usesPatrimonialesStep } from '../../lib/product';
 import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
 import {
   diligenciaLabel,
@@ -54,6 +54,39 @@ function edadCumplida(iso?: string): number | null {
   let e = n.getFullYear() - y;
   if (n.getMonth() + 1 < mo || (n.getMonth() + 1 === mo && n.getDate() < d)) e--;
   return e >= 0 ? e : null;
+}
+
+function validateFecha(iso?: string, isJuridica = false): string | undefined {
+  const raw = String(iso || '').trim();
+  if (!raw) {
+    return isJuridica
+      ? 'La fecha de constitución es obligatoria'
+      : 'La fecha de nacimiento es obligatoria';
+  }
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) {
+    return 'Ingresa una fecha válida';
+  }
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (y < 1900) {
+    return 'El año no puede ser menor a 1900';
+  }
+  const dt = new Date(y, mo - 1, d);
+  if (
+    dt.getFullYear() !== y ||
+    dt.getMonth() + 1 !== mo ||
+    dt.getDate() !== d
+  ) {
+    return 'La fecha ingresada no es válida';
+  }
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (dt > today) {
+    return 'La fecha no puede ser mayor a hoy';
+  }
+  return undefined;
 }
 
 function emptyFuneralBeneficiario(pporcen = 100): FuneralPerson {
@@ -182,7 +215,7 @@ function focusClientError(errors: ValidationErrors) {
   });
 }
 
-const emailRe   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMPRESA_ID = Number(import.meta.env.VITE_EMPRESA_ID ?? 1);
 
 function onlyLetters(v: string): string {
@@ -235,6 +268,7 @@ export function EmissionStep() {
   /** true cuando el usuario editó la cédula a mano (no solo blur del OCR). */
   const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
+  const checkPatrimonialesFlow = isPatrimoniales() || usesPatrimonialesStep();
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
   const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
@@ -246,6 +280,44 @@ export function EmissionStep() {
       setAsegurado({ tipoDoc: expected });
     }
   }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
+
+  useEffect(() => {
+    if (!checkFuneralFlow || sameInsured === false) return;
+    setAsegurado({
+      tipoDoc: tomador.tipoDoc,
+      identificacion: tomador.identificacion,
+      nombre: tomador.nombre,
+      apellido: tomador.apellido,
+      telefono: tomador.telefono,
+      email: tomador.email,
+      fechaNac: tomador.fechaNac,
+      sexo: tomador.sexo,
+      estadoCivil: tomador.estadoCivil,
+      estado: tomador.estado,
+      cestado: tomador.cestado,
+      ciudad: tomador.ciudad,
+      cciudad: tomador.cciudad,
+      direccion: tomador.direccion,
+    });
+  }, [
+    checkFuneralFlow,
+    sameInsured,
+    tomador.tipoDoc,
+    tomador.identificacion,
+    tomador.nombre,
+    tomador.apellido,
+    tomador.telefono,
+    tomador.email,
+    tomador.fechaNac,
+    tomador.sexo,
+    tomador.estadoCivil,
+    tomador.estado,
+    tomador.cestado,
+    tomador.ciudad,
+    tomador.cciudad,
+    tomador.direccion,
+    setAsegurado,
+  ]);
 
   useEffect(() => {
     if (!checkFuneralFlow || sameInsured === false) return;
@@ -303,16 +375,16 @@ export function EmissionStep() {
   const parentescoOptions =
     catalogs.parentescos.length > 0
       ? catalogs.parentescos
-          .filter((p) => String(p.code) !== '1')
-          .map((p) => ({ value: String(p.code), label: p.label }))
+        .filter((p) => String(p.code) !== '1')
+        .map((p) => ({ value: String(p.code), label: p.label }))
       : [
-          { value: '2', label: 'Cónyuge' },
-          { value: '3', label: 'Hijo (a)' },
-          { value: '4', label: 'Abuelos (as)' },
-          { value: '5', label: 'Tíos (as)' },
-          { value: '6', label: 'Padres' },
-          { value: '7', label: 'Hermano (a)' },
-        ];
+        { value: '2', label: 'Cónyuge' },
+        { value: '3', label: 'Hijo (a)' },
+        { value: '4', label: 'Abuelos (as)' },
+        { value: '5', label: 'Tíos (as)' },
+        { value: '6', label: 'Padres' },
+        { value: '7', label: 'Hermano (a)' },
+      ];
 
   const patchFuneralBeneficiario = (idx: number, patch: Partial<FuneralPerson>) => {
     const next = [...(funeral.beneficiarios ?? [])];
@@ -495,19 +567,19 @@ export function EmissionStep() {
   const runFuneralCedulaAuto = useCallback(
     async (
       prefix: string,
-      tipoDoc: string,
+      _tipoDoc: string,
       identificacion: string,
-      current: PersonFormPatch,
-      setPerson: (patch: PersonFormPatch) => void,
+      _current: PersonFormPatch,
+      _setPerson: (patch: PersonFormPatch) => void,
     ): Promise<boolean> => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 6) return true;
       const ok = await checkFuneralCedula(prefix, identificacion);
       if (!ok) return false;
-      await lookupByCedula(prefix, tipoDoc || 'V', identificacion, current, setPerson);
+      // Funerario: no consultar /emissions/propietary (lookup de dueño de vehículo / RCV).
       return true;
     },
-    [checkFuneralCedula, lookupByCedula],
+    [checkFuneralCedula],
   );
 
   // Tomador = pagador: solo se valida póliza vigente si también es el titular (sameInsured).
@@ -526,13 +598,23 @@ export function EmissionStep() {
     const digits = String(tomador.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'tom_',
-        tomador.tipoDoc ?? 'V',
-        tomador.identificacion,
-        tomador,
-        setTomador,
-      );
+      if (checkFuneralFlow) {
+        void runFuneralCedulaAuto(
+          'tom_',
+          tomador.tipoDoc ?? 'V',
+          tomador.identificacion,
+          tomador,
+          setTomador,
+        );
+      } else {
+        void lookupByCedula(
+          'tom_',
+          tomador.tipoDoc ?? 'V',
+          tomador.identificacion,
+          tomador,
+          setTomador,
+        );
+      }
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
@@ -545,17 +627,27 @@ export function EmissionStep() {
   ]);
 
   useEffect(() => {
-    if (!checkFuneralFlow || sameInsured) return;
+    if (sameInsured) return;
     const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'aseg_',
-        asegurado.tipoDoc ?? 'V',
-        asegurado.identificacion,
-        asegurado,
-        setAsegurado,
-      );
+      if (checkFuneralFlow) {
+        void runFuneralCedulaAuto(
+          'aseg_',
+          asegurado.tipoDoc ?? 'V',
+          asegurado.identificacion,
+          asegurado,
+          setAsegurado,
+        );
+      } else {
+        void lookupByCedula(
+          'aseg_',
+          asegurado.tipoDoc ?? 'V',
+          asegurado.identificacion,
+          asegurado,
+          setAsegurado,
+        );
+      }
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
@@ -564,13 +656,30 @@ export function EmissionStep() {
     asegurado.identificacion,
     asegurado.tipoDoc,
     runFuneralCedulaAuto,
+    lookupByCedula,
     setAsegurado,
   ]);
 
+  useEffect(() => {
+    if (checkFuneralFlow || checkPatrimonialesFlow || !hasBeneficiary) return;
+    const digits = String(beneficiario.identificacion || '').replace(/\D/g, '');
+    if (digits.length < 6) return;
+    const timer = window.setTimeout(() => {
+      void lookupByCedula(
+        'benef_',
+        beneficiario.tipoDoc ?? 'V',
+        beneficiario.identificacion,
+        beneficiario,
+        setBeneficiario,
+      );
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [checkFuneralFlow, checkPatrimonialesFlow, hasBeneficiary, beneficiario.identificacion, beneficiario.tipoDoc, lookupByCedula, setBeneficiario]);
+
   const validate = async () => {
     const e: ValidationErrors = {};
-    const req  = (v?: string) => !(v ?? '').trim();
-    const len  = (v?: string) => (v ?? '').trim().length;
+    const req = (v?: string) => !(v ?? '').trim();
+    const len = (v?: string) => (v ?? '').trim().length;
     const digs = (v?: string) => (v ?? '').replace(/\D/g, '').length;
 
     const validatePerson = (
@@ -578,6 +687,8 @@ export function EmissionStep() {
       prefix: string,
       opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
     ) => {
+      const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+
       if (opts?.secondaryIdent) {
         const idErr = validateSecondaryPersonIdentificacion(person.identificacion);
         if (idErr) e[`${prefix}identificacion`] = idErr;
@@ -605,8 +716,10 @@ export function EmissionStep() {
         e[`${prefix}apellido`] = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
       }
 
-      if (req(person.sexo))       e[`${prefix}sexo`]        = 'Selecciona el sexo';
-      if (req(person.estadoCivil)) e[`${prefix}estadoCivil`] = 'Selecciona el estado civil';
+      if (!isJuridica) {
+        if (req(person.sexo)) e[`${prefix}sexo`] = 'Selecciona el sexo';
+        if (req(person.estadoCivil)) e[`${prefix}estadoCivil`] = 'Selecciona el estado civil';
+      }
 
       if (req(person.telefono)) {
         e[`${prefix}telefono`] = 'El teléfono es obligatorio';
@@ -624,7 +737,8 @@ export function EmissionStep() {
         e[`${prefix}email`] = `El correo no puede superar ${PERSON_FIELD_LIMITS.email} caracteres`;
       }
 
-      if (req(person.fechaNac)) e[`${prefix}fechaNac`] = 'La fecha de nacimiento es obligatoria';
+      const fnacErr = validateFecha(person.fechaNac, isJuridica);
+      if (fnacErr) e[`${prefix}fechaNac`] = fnacErr;
 
       // SearchSelect usa cestado/cciudad; el texto estado/ciudad puede venir vacío del autofill
       const hasEstado =
@@ -684,7 +798,8 @@ export function EmissionStep() {
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
         if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
-        if (!(b.fechaNac ?? '').trim()) e[`fben_${i}_fnac`] = 'La fecha de nacimiento es obligatoria';
+        const fnacErr = validateFecha(b.fechaNac);
+        if (fnacErr) e[`fben_${i}_fnac`] = fnacErr;
         if (!(b.parentesco ?? '').trim()) e[`fben_${i}_parentesco`] = 'El parentesco es obligatorio';
         if (!(b.sexo ?? '').trim()) e[`fben_${i}_sexo`] = 'Selecciona el sexo';
         const pct = Number(b.pporcen);
@@ -697,7 +812,7 @@ export function EmissionStep() {
       if (filled > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
-    } else if (hasBeneficiary && !tarjetaFlow) {
+    } else if (hasBeneficiary && !tarjetaFlow && !checkPatrimonialesFlow) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
 
@@ -754,15 +869,18 @@ export function EmissionStep() {
     prefix: string,
     ciuState: any,
     opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
-  ) => (
-    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
-      <Field
-        anchor={`cli-${prefix}identificacion`}
-        label={opts?.funeralInsured ? 'Tipo Doc. Identidad *' : 'Cédula o documento *'}
-        error={errors[`${prefix}identificacion`]}
-        hint={
-          isRcvEmision
-            ? (() => {
+  ) => {
+    const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+
+    return (
+      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+        <Field
+          anchor={`cli-${prefix}identificacion`}
+          label={opts?.funeralInsured ? 'Tipo Doc. Identidad *' : 'Cédula o documento *'}
+          error={errors[`${prefix}identificacion`]}
+          hint={
+            isRcvEmision
+              ? (() => {
                 const ocrId = resolveRcvOcrIdentDigits(
                   prefix,
                   useWizardStore.getState().documents,
@@ -773,37 +891,37 @@ export function EmissionStep() {
                 }
                 return 'Al salir del campo se buscan los datos en Sis2000';
               })()
-            : checkFuneralFlow
-              ? lookupLoading[prefix]
-                ? 'Consultando Sis2000…'
-                : prefix === 'tom_' && sameInsured === false
-                  ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
-                  : 'Al completar la cédula se consulta si se puede asegurar'
-              : undefined
-        }
-      >
-        <IdentityInput
-          tipoDoc={person.tipoDoc ?? 'V'}
-          identificacion={person.identificacion ?? ''}
-          maxLength={
-            opts?.secondaryIdent
-              ? SECONDARY_IDENTIFICACION_MAX_LENGTH
-              : PERSON_FIELD_LIMITS.identificacion
+              : checkFuneralFlow
+                ? lookupLoading[prefix]
+                  ? 'Consultando Sis2000…'
+                  : prefix === 'tom_' && sameInsured === false
+                    ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
+                    : 'Al completar la cédula se consulta si se puede asegurar'
+                : undefined
           }
-          loading={Boolean(lookupLoading[prefix])}
-          onTipoDocChange={(v) => {
-            lastLookupCid.current[prefix] = '';
-            setPerson({ tipoDoc: v });
-          }}
-          onIdentificacionChange={(v) => {
-            lastLookupCid.current[prefix] = '';
-            lastFuneralCedula.current[prefix] = '';
-            manualIdentEdit.current[prefix] = true;
-            setPerson({ identificacion: clipPersonField('identificacion', v) });
-          }}
-          onIdentificacionBlur={
-            isRcvEmision
-              ? (id) => {
+        >
+          <IdentityInput
+            tipoDoc={person.tipoDoc ?? 'V'}
+            identificacion={person.identificacion ?? ''}
+            maxLength={
+              opts?.secondaryIdent
+                ? SECONDARY_IDENTIFICACION_MAX_LENGTH
+                : PERSON_FIELD_LIMITS.identificacion
+            }
+            loading={Boolean(lookupLoading[prefix])}
+            onTipoDocChange={(v) => {
+              lastLookupCid.current[prefix] = '';
+              setPerson({ tipoDoc: v });
+            }}
+            onIdentificacionChange={(v) => {
+              lastLookupCid.current[prefix] = '';
+              lastFuneralCedula.current[prefix] = '';
+              manualIdentEdit.current[prefix] = true;
+              setPerson({ identificacion: clipPersonField('identificacion', v) });
+            }}
+            onIdentificacionBlur={
+              checkFuneralFlow
+                ? (id) => {
                   const docs = useWizardStore.getState().documents;
                   const ocrIdent = resolveRcvOcrIdentDigits(prefix, docs);
                   if (
@@ -817,184 +935,193 @@ export function EmissionStep() {
                   }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
-                ? (id) => {
+                : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
+                  ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
-                : undefined
-          }
-        />
-      </Field>
-      <div className="hidden sm:block"></div>
-      <Field anchor={`cli-${prefix}nombre`} label="Nombre *" error={errors[`${prefix}nombre`]}>
-        <Input
-          value={person.nombre ?? ''}
-          onChange={(e) => setPerson({ nombre: clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre) })}
-          placeholder="Nombre"
-          maxLength={PERSON_FIELD_LIMITS.nombre}
-        />
-      </Field>
-      <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
-        <Input
-          value={person.apellido ?? ''}
-          onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
-          placeholder="Apellido"
-          maxLength={PERSON_FIELD_LIMITS.apellido}
-        />
-      </Field>
-      <Field anchor={`cli-${prefix}telefono`} label="Teléfono *" error={errors[`${prefix}telefono`]} hint="11 dígitos · Digitel 0412/0422 · Movistar 0414/0424 · Movilnet 0416/0426 · fijos 02XX">
-        <Input
-          value={formatTelefono(person.telefono ?? '')}
-          onChange={(e) => setPerson({ telefono: formatTelefono(e.target.value) })}
-          placeholder="(0412) 123-4567"
-          type="tel"
-          inputMode="numeric"
-          maxLength={PERSON_FIELD_LIMITS.telefonoDisplay}
-        />
-      </Field>
-      <Field anchor={`cli-${prefix}email`} label="Correo electrónico *" error={errors[`${prefix}email`]}>
-        <Input
-          value={person.email ?? ''}
-          onChange={(e) => setPerson({ email: clipPersonField('email', e.target.value) })}
-          placeholder="correo@ejemplo.com"
-          type="email"
-          inputMode="email"
-          maxLength={PERSON_FIELD_LIMITS.email}
-        />
-      </Field>
-      <PersonLocationFields
-        person={person}
-        setPerson={setPerson}
-        prefix={prefix}
-        errors={errors}
-        estados={catalogs.estados}
-        ciuState={ciuState}
-        catalogsLoading={catalogs.loading}
-        exelixiFlow={exelixiFlow}
-      />
-      <Field
-        anchor={`cli-${prefix}fechaNac`}
-        label="Fecha de Nac. *"
-        error={errors[`${prefix}fechaNac`]}
-        hint={(() => {
-          const edad = edadCumplida(person.fechaNac);
-          if (edad == null) return undefined;
-          return edad > 80
-            ? `${edad} años cumplidos · el plan funerario admite hasta 80`
-            : `${edad} años cumplidos`;
-        })()}
-      >
-        <Input
-          value={person.fechaNac ?? ''}
-          onChange={(e) => setPerson({ fechaNac: e.target.value })}
-          type="date"
-          max={new Date().toISOString().split('T')[0]}
-        />
-      </Field>
-      <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
-        <SearchSelect
-          value={person.sexo}
-          options={
-            catalogs.sexos.length > 0
-              ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
-              : [
-                  { value: 'Femenino',  label: 'Femenino'  },
-                  { value: 'Masculino', label: 'Masculino' },
-                ]
-          }
-          onChange={(value) => setPerson({ sexo: value })}
-          placeholder="— Seleccionar —"
-          loading={catalogs.loading}
-        />
-      </Field>
-      {opts?.funeralInsured && (
-        <>
-          <Field
-            anchor={`cli-${prefix}estatura`}
-            label="Estatura *"
-            error={errors[`${prefix}estatura`]}
-            hint="Altura (mts.)"
-          >
-            <Input
-              value={person.estatura ?? ''}
-              onChange={(e) => setPerson({ estatura: e.target.value.replace(/[^0-9.,]/g, '') })}
-              placeholder="1.70"
-              inputMode="decimal"
-            />
-          </Field>
-          <Field
-            anchor={`cli-${prefix}peso`}
-            label="Peso *"
-            error={errors[`${prefix}peso`]}
-            hint="Peso (kg.)"
-          >
-            <Input
-              value={person.peso ?? ''}
-              onChange={(e) => setPerson({ peso: e.target.value.replace(/[^0-9.,]/g, '') })}
-              placeholder="70"
-              inputMode="decimal"
-            />
-          </Field>
-        </>
-      )}
-      <Field anchor={`cli-${prefix}estadoCivil`} label="Estado Civil *" error={errors[`${prefix}estadoCivil`]}>
-        <SearchSelect
-          value={person.estadoCivil}
-          options={
-            catalogs.estadosCivil.length > 0
-              ? catalogs.estadosCivil.map((s) => ({ value: String(s.label), label: s.label }))
-              : [
-                  { value: 'Soltero(a)',     label: 'Soltero(a)'     },
-                  { value: 'Casado(a)',      label: 'Casado(a)'      },
-                  { value: 'Divorciado(a)',  label: 'Divorciado(a)'  },
-                  { value: 'Viudo(a)',       label: 'Viudo(a)'       },
-                ]
-          }
-          onChange={(value) => setPerson({ estadoCivil: value })}
-          placeholder="— Seleccionar —"
-          loading={catalogs.loading}
-        />
-      </Field>
-      <div className="hidden sm:block"></div>
-      <Field anchor={`cli-${prefix}direccion`} label="Dirección *" error={errors[`${prefix}direccion`]} full>
-        <Textarea
-          value={person.direccion ?? ''}
-          onChange={(e) => setPerson({ direccion: clipPersonField('direccion', e.target.value) })}
-          placeholder="Dirección completa"
-          rows={3}
-          maxLength={PERSON_FIELD_LIMITS.direccion}
-        />
-      </Field>
-      {prefix === 'tom_' && isRcvEmision && showProfesion && (
-        <Field anchor="cli-tom_profesion" label="Profesión *" error={errors.tom_profesion}>
-          <SearchSelect
-            value={person.cprofesion ?? ''}
-            options={catalogs.profesiones.map((o) => ({ value: o.code, label: o.label }))}
-            onChange={(code, label) => {
-              setPerson({ cprofesion: code, xprofesion: label });
-            }}
-            placeholder="— Seleccionar —"
-            loading={catalogs.loading}
-            noOptionsText="Sin profesiones disponibles"
+                  : undefined
+            }
           />
         </Field>
-      )}
-      {prefix === 'tom_' && isRcvEmision && showActividad && (
-        <Field label="Actividad económica *" error={errors.tom_profesion}>
-          <SearchSelect
-            value={person.cactividad ?? ''}
-            options={catalogs.actividades.map((o) => ({ value: o.code, label: o.label }))}
-            onChange={(code, label) => {
-              setPerson({ cactividad: code, xactividad: label });
-            }}
-            placeholder="— Seleccionar (si no indicó profesión) —"
-            loading={catalogs.loading}
-            noOptionsText="Sin actividades disponibles"
+        <div className="hidden sm:block"></div>
+        <Field anchor={`cli-${prefix}nombre`} label="Nombre *" error={errors[`${prefix}nombre`]}>
+          <Input
+            value={person.nombre ?? ''}
+            onChange={(e) => setPerson({ nombre: clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre) })}
+            placeholder="Nombre"
+            maxLength={PERSON_FIELD_LIMITS.nombre}
           />
         </Field>
-      )}
-    </div>
-  );
+        <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
+          <Input
+            value={person.apellido ?? ''}
+            onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
+            placeholder="Apellido"
+            maxLength={PERSON_FIELD_LIMITS.apellido}
+          />
+        </Field>
+        <Field anchor={`cli-${prefix}telefono`} label="Teléfono *" error={errors[`${prefix}telefono`]} hint="11 dígitos · Digitel 0412/0422 · Movistar 0414/0424 · Movilnet 0416/0426 · fijos 02XX">
+          <Input
+            value={formatTelefono(person.telefono ?? '')}
+            onChange={(e) => setPerson({ telefono: formatTelefono(e.target.value) })}
+            placeholder="(0412) 123-4567"
+            type="tel"
+            inputMode="numeric"
+            maxLength={PERSON_FIELD_LIMITS.telefonoDisplay}
+          />
+        </Field>
+        <Field anchor={`cli-${prefix}email`} label="Correo electrónico *" error={errors[`${prefix}email`]}>
+          <Input
+            value={person.email ?? ''}
+            onChange={(e) => setPerson({ email: clipPersonField('email', e.target.value) })}
+            placeholder="correo@ejemplo.com"
+            type="email"
+            inputMode="email"
+            maxLength={PERSON_FIELD_LIMITS.email}
+          />
+        </Field>
+        <PersonLocationFields
+          person={person}
+          setPerson={setPerson}
+          prefix={prefix}
+          errors={errors}
+          estados={catalogs.estados}
+          ciuState={ciuState}
+          catalogsLoading={catalogs.loading}
+          exelixiFlow={exelixiFlow}
+        />
+        <Field
+          anchor={`cli-${prefix}fechaNac`}
+          label={isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
+          error={errors[`${prefix}fechaNac`]}
+          hint={
+            isJuridica
+              ? undefined
+              : (() => {
+                const edad = edadCumplida(person.fechaNac);
+                if (edad == null) return undefined;
+                return edad > 80
+                  ? `${edad} años cumplidos · el plan funerario admite hasta 80`
+                  : `${edad} años cumplidos`;
+              })()
+          }
+        >
+          <Input
+            value={person.fechaNac ?? ''}
+            onChange={(e) => setPerson({ fechaNac: e.target.value })}
+            type="date"
+            max={new Date().toISOString().split('T')[0]}
+          />
+        </Field>
+        {!isJuridica && (
+          <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
+            <SearchSelect
+              value={person.sexo}
+              options={
+                catalogs.sexos.length > 0
+                  ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
+                  : [
+                    { value: 'Femenino', label: 'Femenino' },
+                    { value: 'Masculino', label: 'Masculino' },
+                  ]
+              }
+              onChange={(value) => setPerson({ sexo: value })}
+              placeholder="— Seleccionar —"
+              loading={catalogs.loading}
+            />
+          </Field>
+        )}
+        {opts?.funeralInsured && (
+          <>
+            <Field
+              anchor={`cli-${prefix}estatura`}
+              label="Estatura *"
+              error={errors[`${prefix}estatura`]}
+              hint="Altura (mts.)"
+            >
+              <Input
+                value={person.estatura ?? ''}
+                onChange={(e) => setPerson({ estatura: e.target.value.replace(/[^0-9.,]/g, '') })}
+                placeholder="1.70"
+                inputMode="decimal"
+              />
+            </Field>
+            <Field
+              anchor={`cli-${prefix}peso`}
+              label="Peso *"
+              error={errors[`${prefix}peso`]}
+              hint="Peso (kg.)"
+            >
+              <Input
+                value={person.peso ?? ''}
+                onChange={(e) => setPerson({ peso: e.target.value.replace(/[^0-9.,]/g, '') })}
+                placeholder="70"
+                inputMode="decimal"
+              />
+            </Field>
+          </>
+        )}
+        {!isJuridica && (
+          <Field anchor={`cli-${prefix}estadoCivil`} label="Estado Civil *" error={errors[`${prefix}estadoCivil`]}>
+            <SearchSelect
+              value={person.estadoCivil}
+              options={
+                catalogs.estadosCivil.length > 0
+                  ? catalogs.estadosCivil.map((s) => ({ value: String(s.label), label: s.label }))
+                  : [
+                    { value: 'Soltero(a)', label: 'Soltero(a)' },
+                    { value: 'Casado(a)', label: 'Casado(a)' },
+                    { value: 'Divorciado(a)', label: 'Divorciado(a)' },
+                    { value: 'Viudo(a)', label: 'Viudo(a)' },
+                  ]
+              }
+              onChange={(value) => setPerson({ estadoCivil: value })}
+              placeholder="— Seleccionar —"
+              loading={catalogs.loading}
+            />
+          </Field>
+        )}
+        <div className="hidden sm:block"></div>
+        <Field anchor={`cli-${prefix}direccion`} label="Dirección *" error={errors[`${prefix}direccion`]} full>
+          <Textarea
+            value={person.direccion ?? ''}
+            onChange={(e) => setPerson({ direccion: clipPersonField('direccion', e.target.value) })}
+            placeholder="Dirección completa"
+            rows={3}
+            maxLength={PERSON_FIELD_LIMITS.direccion}
+          />
+        </Field>
+        {prefix === 'tom_' && isRcvEmision && showProfesion && (
+          <Field anchor="cli-tom_profesion" label="Profesión *" error={errors.tom_profesion}>
+            <SearchSelect
+              value={person.cprofesion ?? ''}
+              options={catalogs.profesiones.map((o) => ({ value: o.code, label: o.label }))}
+              onChange={(code, label) => {
+                setPerson({ cprofesion: code, xprofesion: label });
+              }}
+              placeholder="— Seleccionar —"
+              loading={catalogs.loading}
+              noOptionsText="Sin profesiones disponibles"
+            />
+          </Field>
+        )}
+        {prefix === 'tom_' && isRcvEmision && showActividad && (
+          <Field label="Actividad económica *" error={errors.tom_profesion}>
+            <SearchSelect
+              value={person.cactividad ?? ''}
+              options={catalogs.actividades.map((o) => ({ value: o.code, label: o.label }))}
+              onChange={(code, label) => {
+                setPerson({ cactividad: code, xactividad: label });
+              }}
+              placeholder="— Seleccionar (si no indicó profesión) —"
+              loading={catalogs.loading}
+              noOptionsText="Sin actividades disponibles"
+            />
+          </Field>
+        )}
+      </div>
+    );
+  };
 
   return (
     <div className="animate-fade-in">
@@ -1147,9 +1274,9 @@ export function EmissionStep() {
                           catalogs.sexos.length
                             ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
                             : [
-                                { value: 'Masculino', label: 'Masculino' },
-                                { value: 'Femenino', label: 'Femenino' },
-                              ]
+                              { value: 'Masculino', label: 'Masculino' },
+                              { value: 'Femenino', label: 'Femenino' },
+                            ]
                         }
                         onChange={(value) => patchFuneralBeneficiario(idx, { sexo: value })}
                         placeholder="— Seleccionar —"
@@ -1161,6 +1288,7 @@ export function EmissionStep() {
                         type="date"
                         value={ben.fechaNac ?? ''}
                         onChange={(ev) => patchFuneralBeneficiario(idx, { fechaNac: ev.target.value })}
+                        max={new Date().toISOString().split('T')[0]}
                       />
                     </Field>
                   </div>
@@ -1182,7 +1310,7 @@ export function EmissionStep() {
               </button>
             </div>
           </SectionCard>
-        ) : !tarjetaFlow ? (
+        ) : !tarjetaFlow && !checkPatrimonialesFlow ? (
           <SectionCard
             Icon={Heart}
             title="Datos del Beneficiario Preferencial"

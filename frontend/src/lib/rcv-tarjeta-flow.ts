@@ -72,6 +72,16 @@ export function shouldUseTarjetaPublicApi(): boolean {
   return isTarjetaRcvFlow();
 }
 
+export type TipoPlacaRcv = 'nacional' | 'extranjera' | 'binacional';
+
+/** Flujo tarjeta: solo RCV nacional (sin extranjera ni binacional). */
+export function resolveTipoPlacaForTarjetaFlow(
+  detected: TipoPlacaRcv | undefined | null,
+): TipoPlacaRcv {
+  if (shouldUseTarjetaPublicApi()) return 'nacional';
+  return detected ?? 'nacional';
+}
+
 export function markTarjetaPublicSession(): void {
   try {
     sessionStorage.setItem(TARJETA_SESSION_KEY, '1');

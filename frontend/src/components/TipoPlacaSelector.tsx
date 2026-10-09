@@ -54,12 +54,20 @@ export function TipoPlacaSelector({
             Tipo de emisión RCV
           </p>
           <p className="text-xs text-slate-600 mt-1 leading-relaxed">
-            Elige cómo emitir: <strong>Binacional</strong> si el vehículo venezolano sale del país;
-            <strong> Extranjera</strong> solo si el OCR detectó placa extranjera.
+            {showBinacional ? (
+              <>
+                Elige cómo emitir: <strong>Binacional</strong> si el vehículo venezolano sale del país;
+                <strong> Extranjera</strong> solo si el OCR detectó placa extranjera.
+              </>
+            ) : (
+              <>
+                Elige <strong>Nacional</strong> para placa venezolana o <strong>Extranjera</strong> si el OCR detectó placa extranjera.
+              </>
+            )}
           </p>
         </div>
 
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+        <div className={cn('grid grid-cols-1 gap-3', showBinacional ? 'sm:grid-cols-3' : 'sm:grid-cols-2')}>
           {options.map(({ id, label, desc, Icon }) => {
             const isActive = value === id;
             const isExtranjeraOption = id === 'extranjera';

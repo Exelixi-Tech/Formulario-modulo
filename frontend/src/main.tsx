@@ -22,6 +22,7 @@ applyExelixiBranding('Formulario');
 if (isTarjetaRcvFlow()) {
   markTarjetaPublicSession();
   hydrateTarjetaMetadataCanal();
+  useWizardStore.getState().setVehicle({ tipoPlaca: 'nacional', tipoCarnet: 'nacional' });
 }
 
 rememberMarketplaceActorFromToken(getNexusTokenFromUrl());

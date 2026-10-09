@@ -12,7 +12,7 @@ import { applyOcrPersonRoles } from './ocr-person-roles';
 import { applyFuneralOcrCedulas } from './funeral-ocr-apply';
 import { toDiligenciaDocTypes, type DiligenciaDocType } from './diligencia';
 import type { PersonData } from '../types';
-import { persistTarjetaMetadataCanal } from './rcv-tarjeta-flow';
+import { persistTarjetaMetadataCanal, resolveTipoPlacaForTarjetaFlow } from './rcv-tarjeta-flow';
 import { useWizardStore } from '../store/wizardStore';
 
 export type BuilderProductBranch =
@@ -304,7 +304,7 @@ export function applyExelixiOcrHandoff(
       serialMotor: normalizeMotorSerial(sanitizeOcrField(cert.serialMotor)),
       cilindrada: rcvHandoff ? cert.cilindrada ?? '' : '',
       tipoCarnet: rcvHandoff ? cert.tipoCarnet : undefined,
-      tipoPlaca: resolveOcrTipoPlaca(cert),
+      tipoPlaca: resolveTipoPlacaForTarjetaFlow(resolveOcrTipoPlaca(cert)),
     });
   }
 
@@ -355,11 +355,21 @@ export function applyExelixiOcrHandoff(
   return true;
 }
 
-/** Siguiente paso: módulo emisión (planes product-emission). */
+import { isPatrimoniales, isFunerario } from './product';
+
+/** Siguiente paso: módulo emisión (planes product-emission o La Mundial). */
 export function getEmisionContinueUrl(): string {
   const configured = import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined;
   const base = (configured?.replace(/\/$/, '') || '/emision').replace(/\/$/, '');
-  const params = new URLSearchParams({ flow: 'exelixi-catalog', wizardStep: '4' });
+  const isCatalog = isExelixiCatalogFlow();
+  const product = sessionStorage.getItem('exelixi_product') || (isPatrimoniales() ? 'patrimoniales' : isFunerario() ? 'funerario' : 'rcv');
+  const params = new URLSearchParams({ wizardStep: '4' });
+  if (isCatalog) {
+    params.set('flow', 'exelixi-catalog');
+  }
+  if (product) {
+    params.set('product', product);
+  }
 
   try {
     const current = new URL(window.location.href);
@@ -383,7 +393,7 @@ export function continueToEmisionModule(snapshot?: Partial<ExelixiWizardHandoff>
   }
 
   if (typeof window.__bridgeAdvance === 'function') {
-    void window.__bridgeAdvance({ exelixiCatalogFlow: true });
+    void window.__bridgeAdvance(snapshot as Record<string, unknown> | undefined);
     return;
   }
 
