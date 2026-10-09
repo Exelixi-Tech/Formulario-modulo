@@ -1321,15 +1321,11 @@ export function VehicleStep() {
                     <option value="">— Selecciona actividad —</option>
                     {recargosRcv.map((r) => (
                       <option key={r.csustanc} value={String(r.csustanc)}>
-                        {r.xsustanc} ({Number(r.porcenta) > 0 ? '+' : ''}{Number(r.porcenta)}%)
+                        {/* Área técnica (pruebas JD 08-10): la actividad no muestra el % de recargo. */}
+                        {r.xsustanc}
                       </option>
                     ))}
                   </Select>
-                )}
-                {!recargosLoad && vehicle.csustanc_rcv != null && (
-                  <p className="mt-1.5 text-[0.72rem] font-semibold text-slate-600">
-                    Recargo aplicado: {Number(vehicle.precargorcv ?? 0)}%
-                  </p>
                 )}
               </Field>
 
