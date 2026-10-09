@@ -823,9 +823,8 @@ export function VehicleStep() {
         e.cond_apellido = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
       }
 
-      if (!licencia) {
-        e.cond_licencia = 'El número de licencia es obligatorio';
-      } else if (licencia.length < 5) {
+      // Licencia del conductor habitual: opcional (área técnica); si se escribe, se valida el largo.
+      if (licencia && licencia.length < 5) {
         e.cond_licencia = 'La licencia debe tener al menos 5 caracteres';
       } else if (licencia.length > 20) {
         e.cond_licencia = 'La licencia no puede superar 20 caracteres';
@@ -1322,10 +1321,15 @@ export function VehicleStep() {
                     <option value="">— Selecciona actividad —</option>
                     {recargosRcv.map((r) => (
                       <option key={r.csustanc} value={String(r.csustanc)}>
-                        {r.xsustanc}{Number(r.porcenta) > 0 ? ` (+${r.porcenta}%)` : ''}
+                        {r.xsustanc} ({Number(r.porcenta) > 0 ? '+' : ''}{Number(r.porcenta)}%)
                       </option>
                     ))}
                   </Select>
+                )}
+                {!recargosLoad && vehicle.csustanc_rcv != null && (
+                  <p className="mt-1.5 text-[0.72rem] font-semibold text-slate-600">
+                    Recargo aplicado: {Number(vehicle.precargorcv ?? 0)}%
+                  </p>
                 )}
               </Field>
 
@@ -1608,7 +1612,7 @@ export function VehicleStep() {
                   maxLength={PERSON_FIELD_LIMITS.direccion}
                 />
               </Field>
-              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir *" error={errors.cond_licencia} hint="Ingreso manual. Formato nuevo: Nro. de Verificación (frontal). Antiguo: reverso. Máx. 20 caracteres." full>
+              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir (opcional)" error={errors.cond_licencia} hint="Ingreso manual. Formato nuevo: Nro. de Verificación (frontal). Antiguo: reverso. Máx. 20 caracteres." full>
                 <Input
                   value={conductor.licencia ?? ''}
                   onChange={(e) => setConductor({ licencia: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) })}
