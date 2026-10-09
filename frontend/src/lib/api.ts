@@ -530,6 +530,53 @@ export function getActividades(): Promise<CatalogItem[]> {
   return _fetchValrep('/valrep/actividades');
 }
 
+export interface GetProveedoresParams {
+  cplan?: string | number;
+  cramo?: number | string;
+  centidad?: number | string;
+  citem?: number | string;
+}
+
+export const MOCK_PROVEEDORES: import('../types').ProveedorItem[] = [
+  { xproveedor: 'Venemergencia', cci_rif: 1152516 },
+  { xproveedor: 'Clinicas del Este', cci_rif: 5521516 },
+];
+
+/**
+ * Consulta proveedores de servicio asociados al plan/ramo/entidad/item.
+ * Realiza la petición a /valrep/proveedores y ante fallo o respuesta vacía
+ * retorna los elementos mock por defecto:
+ * [{ xproveedor: 'Venemergencia', cci_rif: 1152516 }, { xproveedor: 'Clinicas del Este', cci_rif: 5521516 }]
+ */
+export async function getProveedores(
+  params?: GetProveedoresParams,
+): Promise<import('../types').ProveedorItem[]> {
+  try {
+    const query = new URLSearchParams();
+    if (params?.cplan != null) query.set('cplan', String(params.cplan));
+    if (params?.cramo != null) query.set('cramo', String(params.cramo));
+    if (params?.centidad != null) query.set('centidad', String(params.centidad));
+    if (params?.citem != null) query.set('citem', String(params.citem));
+
+    const qs = query.toString();
+    const endpoint = `/valrep/proveedores${qs ? `?${qs}` : ''}`;
+    const { data } = await api.get<{
+      ok?: boolean;
+      success?: boolean;
+      items?: import('../types').ProveedorItem[];
+      data?: import('../types').ProveedorItem[];
+    }>(endpoint);
+
+    const items = data?.items ?? data?.data;
+    if (Array.isArray(items) && items.length > 0) {
+      return items;
+    }
+    return MOCK_PROVEEDORES;
+  } catch {
+    return MOCK_PROVEEDORES;
+  }
+}
+
 /**
  * Valida en Sis2000 si un vehículo (por placa y serial) ya posee una póliza vigente.
  */

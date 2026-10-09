@@ -38,6 +38,10 @@ function buildExelixiWizardSnapshot(): Partial<ExelixiWizardHandoff> {
     funeral: snap.funeral,
     ocrDone: snap.ocrDone,
     diligencia: snap.diligencia,
+    category: snap.category,
+    selectedPlan: snap.selectedPlan,
+    cproveedor: snap.cproveedor ?? (snap.selectedProveedor ? snap.selectedProveedor.cci_rif : null),
+    selectedProveedor: snap.selectedProveedor,
   };
 }
 

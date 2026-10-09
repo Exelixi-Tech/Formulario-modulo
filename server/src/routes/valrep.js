@@ -127,6 +127,21 @@ router.get('/actividades', async (_req, res) => {
   }
 });
 
+router.get('/proveedores', async (req, res) => {
+  const { cplan, cramo, centidad, citem } = req.query ?? {};
+  // Mock data as specified
+  const items = [
+    { xproveedor: 'Venemergencia', cci_rif: 1152516 },
+    { xproveedor: 'Clinicas del Este', cci_rif: 5521516 },
+  ];
+  res.json({
+    ok: true,
+    source: 'mock',
+    params: { cplan, cramo, centidad, citem },
+    items,
+  });
+});
+
 router.post('/validate-vehicle', async (req, res) => {
   try {
     const { placa, serial, plan } = req.body ?? {};
