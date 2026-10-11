@@ -121,6 +121,8 @@ export interface NexusVerifyResult {
     accessUrl: string | null;
   };
   reason?: string;
+  /** Falla de red o del servidor (no es una negación del acceso): no debe cerrar la sesión. */
+  transient?: boolean;
 }
 
 function nexusApiCandidates(primary: string): string[] {
@@ -147,6 +149,17 @@ function nexusApiCandidates(primary: string): string[] {
   return out;
 }
 
+/** Corta la verificación si el servidor no responde (evita "Verificando…" infinito). */
+function verifyTimeoutSignal(ms = 10000): AbortSignal | undefined {
+  try {
+    const ctrl = new AbortController();
+    setTimeout(() => ctrl.abort(), ms);
+    return ctrl.signal;
+  } catch {
+    return undefined;
+  }
+}
+
 export async function verifyNexusAccess(nexusApiUrl: string): Promise<NexusVerifyResult> {
   const token = getNexusToken(STORAGE_KEY);
 
@@ -158,6 +171,8 @@ export async function verifyNexusAccess(nexusApiUrl: string): Promise<NexusVerif
   }
 
   let lastReason = 'No se pudo conectar con el servidor de autorización.';
+  // true si algún candidato respondió una negación real (401/403 o active=false).
+  let definitive = false;
 
   for (const base of nexusApiCandidates(nexusApiUrl)) {
     try {
@@ -165,6 +180,7 @@ export async function verifyNexusAccess(nexusApiUrl: string): Promise<NexusVerif
       const res = await fetch(url, {
         method: 'GET',
         cache: 'no-store',
+        signal: verifyTimeoutSignal(),
         headers: {
           Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -173,6 +189,11 @@ export async function verifyNexusAccess(nexusApiUrl: string): Promise<NexusVerif
 
       if (res.status === 304) {
         lastReason = `verify en caché 304 (${base}); se ignoró.`;
+        continue;
+      }
+
+      if (!res.ok && res.status !== 401 && res.status !== 403) {
+        lastReason = `El servidor de autorización respondió ${res.status} (${base}).`;
         continue;
       }
 
@@ -204,11 +225,12 @@ export async function verifyNexusAccess(nexusApiUrl: string): Promise<NexusVerif
         };
       }
 
+      definitive = true;
       lastReason = data.reason ?? 'Servicio no disponible para esta empresa.';
     } catch {
       /* probar siguiente candidato */
     }
   }
 
-  return { active: false, reason: lastReason };
+  return { active: false, reason: lastReason, transient: !definitive };
 }
