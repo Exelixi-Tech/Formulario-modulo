@@ -68,7 +68,7 @@ const STEP_META_BY_PRODUCT: Record<'rcv' | 'funerario', Record<2 | 3, StepMeta>>
     3: {
       eyebrow: 'Paso 03 · Personas',
       title: 'Personas aseguradas',
-      sub: 'El titular ya está cargado. Agrega solo otras personas cubiertas si aplica.',
+      sub: 'El titular ya está cargado. Los adicionales se agregan al elegir el plan.',
     },
   },
 };
@@ -123,13 +123,8 @@ export default function App() {
   const { hideStepper, hideFooterBar } = useUiFlags(config);
 
   useEffect(() => {
-    if (isFunerario() && step === 3) {
-      setLocalStep(2);
-      goTo(2);
-      return;
-    }
     if (step === 2 || step === 3) setLocalStep(step);
-  }, [step, goTo]);
+  }, [step]);
 
   function navigate(to: 2 | 3) {
     setLocalStep(to);

@@ -10,7 +10,12 @@ import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
 import { getProductId, isFunerario, isRcvLaMundialFlow, usesFuneralStep } from '../../lib/product';
-import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
+import {
+  cedulaTienePolizaVigente,
+  polizaVigenteCramo,
+  polizaVigenteLabel,
+} from '../../lib/funeral-cedula-check';
+import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import {
   diligenciaLabel,
   isPersonaJuridica,
@@ -202,6 +207,7 @@ export function EmissionStep() {
     beneficiario, setBeneficiario,
     funeral, setFuneral,
     diligencia, setDiligencia,
+    metadataCanal,
   } = useWizardStore();
 
   const catalogs = useCatalogs();
@@ -215,6 +221,12 @@ export function EmissionStep() {
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
   const ciudadesState = useCiudades(tomador.cestado);
   const aseguradoCiudades = useCiudades(asegurado.cestado);
+  /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
+  const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
+  /** Ramo donde se busca la póliza vigente: el del producto que manda el SSO. */
+  const polizaCramo = polizaVigenteCramo(metadataCanal);
+  /** Solo consulta adpoliza (titular/asegurado). No afecta campos del formulario funerario. */
+  const checkPolizaVigente = (isFunerario() || usesFuneralStep()) && !skipPolizaVigente;
 
   useEffect(() => {
     if (!isRcvEmision) return;
@@ -447,7 +459,7 @@ export function EmissionStep() {
       lastFuneralCedula.current[prefix] = digits;
       setLookupLoading((s) => ({ ...s, [prefix]: true }));
       try {
-        const res = await cedulaTienePolizaVigente(digits);
+        const res = await cedulaTienePolizaVigente(digits, polizaCramo);
         if (res.blocked) {
           lastFuneralOk.current[prefix] = false;
           setErrors((prev) => ({
@@ -457,8 +469,8 @@ export function EmissionStep() {
           toast.warning(
             'No se puede asegurar',
             res.cnpoliza
-              ? `Ya existe una póliza funeraria vigente (${res.cnpoliza}).`
-              : 'Esta cédula ya tiene una póliza funeraria activa. No se puede continuar.',
+              ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
+              : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
             8000,
           );
           return false;
@@ -472,7 +484,7 @@ export function EmissionStep() {
         });
         toast.success(
           'Se puede asegurar',
-          'No hay póliza funeraria vigente para esta cédula.',
+          `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
           2800,
         );
         return true;
@@ -489,31 +501,31 @@ export function EmissionStep() {
         setLookupLoading((s) => ({ ...s, [prefix]: false }));
       }
     },
-    [],
+    [polizaCramo],
   );
 
   const runFuneralCedulaAuto = useCallback(
     async (
       prefix: string,
-      tipoDoc: string,
+      _tipoDoc: string,
       identificacion: string,
-      current: PersonFormPatch,
-      setPerson: (patch: PersonFormPatch) => void,
+      _current: PersonFormPatch,
+      _setPerson: (patch: PersonFormPatch) => void,
     ): Promise<boolean> => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 6) return true;
       const ok = await checkFuneralCedula(prefix, identificacion);
       if (!ok) return false;
-      await lookupByCedula(prefix, tipoDoc || 'V', identificacion, current, setPerson);
+      // Funerario: no consultar /emissions/propietary (lookup de dueño de vehículo / RCV).
       return true;
     },
-    [checkFuneralCedula, lookupByCedula],
+    [checkFuneralCedula],
   );
 
   // Tomador = pagador: solo se valida póliza vigente si también es el titular (sameInsured).
-  // Si solo paga, puede figurar en infinitas pólizas; se valida el asegurado/titular.
+  // Viajero: checkPolizaVigente=false. Si solo paga, no se bloquea.
   useEffect(() => {
-    if (!checkFuneralFlow || sameInsured === false) {
+    if (!checkPolizaVigente || sameInsured === false) {
       lastFuneralCedula.current['tom_'] = '';
       lastFuneralOk.current['tom_'] = true;
       setErrors((prev) => {
@@ -536,7 +548,7 @@ export function EmissionStep() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
-    checkFuneralFlow,
+    checkPolizaVigente,
     sameInsured,
     tomador.identificacion,
     tomador.tipoDoc,
@@ -545,7 +557,7 @@ export function EmissionStep() {
   ]);
 
   useEffect(() => {
-    if (!checkFuneralFlow || sameInsured) return;
+    if (!checkPolizaVigente || sameInsured) return;
     const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
@@ -559,7 +571,7 @@ export function EmissionStep() {
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
-    checkFuneralFlow,
+    checkPolizaVigente,
     sameInsured,
     asegurado.identificacion,
     asegurado.tipoDoc,
@@ -732,8 +744,9 @@ export function EmissionStep() {
       }
     }
 
-    if (checkFuneralFlow) {
+    if (checkPolizaVigente) {
       // Solo titulares/asegurados: el tomador-pagador no se bloquea por póliza vigente.
+      // Viajero: checkPolizaVigente=false.
       if (sameInsured !== false) {
         const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
         if (!tomOk) return false;

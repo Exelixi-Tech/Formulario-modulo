@@ -799,9 +799,8 @@ export function VehicleStep() {
         e.cond_apellido = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
       }
 
-      if (!licencia) {
-        e.cond_licencia = 'El número de licencia es obligatorio';
-      } else if (licencia.length < 5) {
+      // Licencia del conductor habitual: opcional (área técnica); si se escribe, se valida el largo.
+      if (licencia && licencia.length < 5) {
         e.cond_licencia = 'La licencia debe tener al menos 5 caracteres';
       } else if (licencia.length > 20) {
         e.cond_licencia = 'La licencia no puede superar 20 caracteres';
@@ -1298,7 +1297,8 @@ export function VehicleStep() {
                     <option value="">— Selecciona actividad —</option>
                     {recargosRcv.map((r) => (
                       <option key={r.csustanc} value={String(r.csustanc)}>
-                        {r.xsustanc}{Number(r.porcenta) > 0 ? ` (+${r.porcenta}%)` : ''}
+                        {/* Área técnica (pruebas JD 08-10): la actividad no muestra el % de recargo. */}
+                        {r.xsustanc}
                       </option>
                     ))}
                   </Select>
@@ -1584,7 +1584,7 @@ export function VehicleStep() {
                   maxLength={PERSON_FIELD_LIMITS.direccion}
                 />
               </Field>
-              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir *" error={errors.cond_licencia} hint="Máx. 20 caracteres alfanuméricos" full>
+              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir (opcional)" error={errors.cond_licencia} hint="Máx. 20 caracteres alfanuméricos" full>
                 <Input
                   value={conductor.licencia ?? ''}
                   onChange={(e) => setConductor({ licencia: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) })}
