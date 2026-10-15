@@ -106,7 +106,7 @@ export function persistProductFromHints(hints?: ProductDetectHints): ProductId |
     } catch { /* ignore */ }
   }
   const label = `${hints?.nombre ?? ''} ${hints?.moduloNombre ?? ''}`.toLowerCase();
-  if (label.includes('patrimon') || label.includes('bien')) {
+  if (label.includes('patrimon')) {
     try { sessionStorage.setItem(STORAGE_KEY, 'patrimoniales'); } catch { /* ignore */ }
     return 'patrimoniales';
   }

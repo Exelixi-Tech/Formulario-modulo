@@ -355,20 +355,20 @@ export function applyExelixiOcrHandoff(
   return true;
 }
 
-import { isPatrimoniales, isFunerario } from './product';
+import { isPatrimoniales } from './product';
 
 /** Siguiente paso: módulo emisión (planes product-emission o La Mundial). */
 export function getEmisionContinueUrl(): string {
   const configured = import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined;
   const base = (configured?.replace(/\/$/, '') || '/emision').replace(/\/$/, '');
   const isCatalog = isExelixiCatalogFlow();
-  const product = sessionStorage.getItem('exelixi_product') || (isPatrimoniales() ? 'patrimoniales' : isFunerario() ? 'funerario' : 'rcv');
-  const params = new URLSearchParams({ wizardStep: '4' });
-  if (isCatalog) {
-    params.set('flow', 'exelixi-catalog');
-  }
-  if (product) {
-    params.set('product', product);
+  const isPat = isPatrimoniales();
+  // Fuera de patrimoniales se conserva el comportamiento original (mismo orden de parametros).
+  const params = isCatalog || !isPat
+    ? new URLSearchParams({ flow: 'exelixi-catalog', wizardStep: '4' })
+    : new URLSearchParams({ wizardStep: '4' });
+  if (isPat) {
+    params.set('product', sessionStorage.getItem('exelixi_product') || 'patrimoniales');
   }
 
   try {
@@ -393,7 +393,9 @@ export function continueToEmisionModule(snapshot?: Partial<ExelixiWizardHandoff>
   }
 
   if (typeof window.__bridgeAdvance === 'function') {
-    void window.__bridgeAdvance(snapshot as Record<string, unknown> | undefined);
+    void window.__bridgeAdvance(
+      isPatrimoniales() ? (snapshot as Record<string, unknown> | undefined) : { exelixiCatalogFlow: true },
+    );
     return;
   }
 

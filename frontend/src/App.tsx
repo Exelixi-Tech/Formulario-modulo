@@ -37,7 +37,7 @@ function buildExelixiWizardSnapshot(): Partial<ExelixiWizardHandoff> {
     beneficiario: snap.beneficiario,
     vehicle: snap.vehicle,
     funeral: snap.funeral,
-    patrimoniales: snap.patrimoniales,
+    ...(isPatrimoniales() ? { patrimoniales: snap.patrimoniales } : {}),
     ocrDone: snap.ocrDone,
     diligencia: snap.diligencia,
   };
@@ -147,7 +147,7 @@ export default function App() {
     });
   }, [setMetadataCanal]);
   const cotizadorRcv = isCotizadorFlow() && isRcv();
-  const initialStepFromUrl = typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('step') : null;
+  const initialStepFromUrl = isPatrimoniales() && typeof window !== 'undefined' ? new URLSearchParams(window.location.search).get('step') : null;
   const [localStep, setLocalStep] = useState<2 | 3>(() => (
     initialStepFromUrl === '3' ? 3 : initialStepFromUrl === '2' ? 2 : (cotizadorRcv || step === 3 ? 3 : 2)
   ));
@@ -194,13 +194,14 @@ export default function App() {
           '¡Formulario completado!',
           'Datos del cliente y beneficiarios guardados correctamente.',
         );
-        const snapshot = buildExelixiWizardSnapshot();
         if (product.exelixiCatalog) {
           continueToEmisionModule(buildExelixiWizardSnapshot());
         } else if (shouldUseTarjetaPublicApi()) {
           continueTarjetaToEmision();
+        } else if (isPatrimoniales()) {
+          continueToEmisionModule(buildExelixiWizardSnapshot());
         } else {
-          continueToEmisionModule(snapshot);
+          window.__bridgeAdvance?.();
         }
         return;
       }
@@ -222,13 +223,14 @@ export default function App() {
             ? 'Datos del cliente y bien asegurado guardados correctamente.'
             : 'Datos del cliente y las personas guardados correctamente.',
       );
-      const snapshot = buildExelixiWizardSnapshot();
       if (product.exelixiCatalog) {
         continueToEmisionModule(buildExelixiWizardSnapshot());
       } else if (shouldUseTarjetaPublicApi()) {
         continueTarjetaToEmision();
+      } else if (isPatrimoniales()) {
+        continueToEmisionModule(buildExelixiWizardSnapshot());
       } else {
-        continueToEmisionModule(snapshot);
+        window.__bridgeAdvance?.();
       }
     }
   }

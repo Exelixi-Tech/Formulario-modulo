@@ -24,7 +24,7 @@ import {
   getNexusTokenFromUrl,
 } from './nexus-token-client';
 import { canNavigateToStep, getDefaultRequiredDocs } from './wizard-navigation';
-import { getProductConfig } from './product';
+import { getProductConfig, isPatrimoniales } from './product';
 import { BUILDER_PRODUCT_STORAGE_KEY, isExelixiCatalogFlow, ensureExelixiFlowQueryParam } from './exelixi-catalog';
 import { ensureCotizadorFlowQueryParam, isCotizadorFlow } from './cotizador-flow';
 import { applyWizardStepFromUrl, defaultStepForModule, stepToModuleOrder } from './wizard-step';
@@ -37,6 +37,13 @@ import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-f
 import { toast } from '../store/toastStore';
 import { persistFlowHandoff, readFlowHandoff, encodeFlowHandoff } from './flow-handoff';
 import { mergeExelixiWizardHandoff } from './exelixi-wizard-handoff';
+
+/** Las ampliaciones del handoff (snapshot en sessionStorage, merge Exélixi, hidratación local) son solo de patrimoniales. */
+function isPatrimonialHandoff(state?: Record<string, unknown> | null): boolean {
+  if (isPatrimoniales()) return true;
+  const p = state?.product;
+  return p === 'patrimoniales' || p === 'bien';
+}
 
 function isPagosModuleUrl(url: string): boolean {
   try {
@@ -148,7 +155,7 @@ function getSidFromUrl(): string | null {
   } catch { return null; }
 }
 
-function moduleOrder(): number {
+function moduleOrder(): number | null {
   const envOrder = import.meta.env.VITE_BRIDGE_MODULE_ORDER;
   if (envOrder) {
     const n = Number(envOrder);
@@ -163,7 +170,7 @@ function moduleOrder(): number {
   if (host.startsWith('emision.')) return 3;
   if (host.startsWith('pagos.')) return 4;
   const port = window.location.port || '';
-  return PORT_TO_ORDER[port] ?? 2;
+  return PORT_TO_ORDER[port] ?? null;
 }
 
 /**
@@ -253,7 +260,7 @@ function makeBridge(): BridgeAPI {
     }
     // Limpieza de datos fantasma y bloqueo de producto en la sesión backend
     const isCatalogFlow = isExelixiCatalogFlow();
-    const prod = sessionStorage.getItem('exelixi_product') || getProductConfig().id || 'rcv';
+    const prod = sessionStorage.getItem('exelixi_product') || (isPatrimoniales() ? 'patrimoniales' : 'rcv');
     if (!isCatalogFlow) {
       if (prod === 'funerario') {
         delete out.vehicle;
@@ -279,7 +286,7 @@ function makeBridge(): BridgeAPI {
     if (order !== 1) delete out.documents;
     const payload = enrichBridgePayloadForSave(out, getModuleTokenKey());
     persistFlowHandoff(payload);
-    mergeExelixiWizardHandoff(payload);
+    if (isPatrimonialHandoff(payload)) mergeExelixiWizardHandoff(payload);
     return payload;
   };
 
@@ -312,9 +319,9 @@ function makeBridge(): BridgeAPI {
   };
 
   const hydrate = async () => {
-    // Hidratación local desde snapshot de handoff
+    // Hidratación local desde snapshot de handoff (solo patrimoniales)
     const local = readFlowHandoff();
-    if (local) {
+    if (local && isPatrimonialHandoff(local)) {
       applyHydration(local);
     }
 
@@ -365,8 +372,10 @@ function makeBridge(): BridgeAPI {
 
   const save = async (extra: Record<string, unknown> = {}) => {
     const state = { ...collectState(), ...extra };
-    persistFlowHandoff(state);
-    mergeExelixiWizardHandoff(state);
+    if (isPatrimonialHandoff(state)) {
+      persistFlowHandoff(state);
+      mergeExelixiWizardHandoff(state);
+    }
     if (!active || !sid) return;
     try {
       await fetchJson(`${bridgeHost()}/api/flow/save/${sid}`, {
@@ -424,8 +433,10 @@ function makeBridge(): BridgeAPI {
 
   const advance = async (extra: Record<string, unknown> = {}) => {
     const currentState = { ...collectState(), ...extra };
-    persistFlowHandoff(currentState);
-    mergeExelixiWizardHandoff(currentState);
+    if (isPatrimonialHandoff(currentState)) {
+      persistFlowHandoff(currentState);
+      mergeExelixiWizardHandoff(currentState);
+    }
 
     if (!active || !sid || !order) {
       // Sin bridge/sid: solo en desarrollo local se avanza por navegacion directa.
@@ -632,7 +643,7 @@ async function init() {
     console.info('[bridge] active — sid=' + bridge.sid + ' order=' + bridge.order);
   } else if (typeof window !== 'undefined') {
     const local = readFlowHandoff();
-    if (local) {
+    if (local && isPatrimonialHandoff(local)) {
       bridge.hydrate().catch(() => {});
     }
   }
