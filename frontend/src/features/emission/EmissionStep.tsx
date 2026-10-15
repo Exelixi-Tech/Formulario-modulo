@@ -215,7 +215,7 @@ function focusClientError(errors: ValidationErrors) {
   });
 }
 
-const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const emailRe   = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 const EMPRESA_ID = Number(import.meta.env.VITE_EMPRESA_ID ?? 1);
 
 function onlyLetters(v: string): string {
@@ -337,16 +337,16 @@ export function EmissionStep() {
   const parentescoOptions =
     catalogs.parentescos.length > 0
       ? catalogs.parentescos
-        .filter((p) => String(p.code) !== '1')
-        .map((p) => ({ value: String(p.code), label: p.label }))
+          .filter((p) => String(p.code) !== '1')
+          .map((p) => ({ value: String(p.code), label: p.label }))
       : [
-        { value: '2', label: 'Cónyuge' },
-        { value: '3', label: 'Hijo (a)' },
-        { value: '4', label: 'Abuelos (as)' },
-        { value: '5', label: 'Tíos (as)' },
-        { value: '6', label: 'Padres' },
-        { value: '7', label: 'Hermano (a)' },
-      ];
+          { value: '2', label: 'Cónyuge' },
+          { value: '3', label: 'Hijo (a)' },
+          { value: '4', label: 'Abuelos (as)' },
+          { value: '5', label: 'Tíos (as)' },
+          { value: '6', label: 'Padres' },
+          { value: '7', label: 'Hermano (a)' },
+        ];
 
   const patchFuneralBeneficiario = (idx: number, patch: Partial<FuneralPerson>) => {
     const next = [...(funeral.beneficiarios ?? [])];
@@ -640,8 +640,8 @@ export function EmissionStep() {
 
   const validate = async () => {
     const e: ValidationErrors = {};
-    const req = (v?: string) => !(v ?? '').trim();
-    const len = (v?: string) => (v ?? '').trim().length;
+    const req  = (v?: string) => !(v ?? '').trim();
+    const len  = (v?: string) => (v ?? '').trim().length;
     const digs = (v?: string) => (v ?? '').replace(/\D/g, '').length;
 
     const validatePerson = (
@@ -679,7 +679,7 @@ export function EmissionStep() {
       }
 
       if (!isJuridica) {
-        if (req(person.sexo)) e[`${prefix}sexo`] = 'Selecciona el sexo';
+        if (req(person.sexo))       e[`${prefix}sexo`]        = 'Selecciona el sexo';
         if (req(person.estadoCivil)) e[`${prefix}estadoCivil`] = 'Selecciona el estado civil';
       }
 
@@ -835,14 +835,14 @@ export function EmissionStep() {
     const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
 
     return (
-      <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
-        <Field
-          anchor={`cli-${prefix}identificacion`}
-          label={opts?.funeralInsured ? 'Tipo Doc. Identidad *' : 'Cédula o documento *'}
-          error={errors[`${prefix}identificacion`]}
-          hint={
-            isRcvEmision
-              ? (() => {
+    <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
+      <Field
+        anchor={`cli-${prefix}identificacion`}
+        label={opts?.funeralInsured ? 'Tipo Doc. Identidad *' : 'Cédula o documento *'}
+        error={errors[`${prefix}identificacion`]}
+        hint={
+          isRcvEmision
+            ? (() => {
                 const ocrId = resolveRcvOcrIdentDigits(
                   prefix,
                   useWizardStore.getState().documents,
@@ -853,37 +853,37 @@ export function EmissionStep() {
                 }
                 return 'Al salir del campo se buscan los datos en Sis2000';
               })()
-              : checkFuneralFlow
-                ? lookupLoading[prefix]
-                  ? 'Consultando Sis2000…'
-                  : prefix === 'tom_' && sameInsured === false
-                    ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
-                    : 'Al completar la cédula se consulta si se puede asegurar'
-                : undefined
+            : checkFuneralFlow
+              ? lookupLoading[prefix]
+                ? 'Consultando Sis2000…'
+                : prefix === 'tom_' && sameInsured === false
+                  ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
+                  : 'Al completar la cédula se consulta si se puede asegurar'
+              : undefined
+        }
+      >
+        <IdentityInput
+          tipoDoc={person.tipoDoc ?? 'V'}
+          identificacion={person.identificacion ?? ''}
+          maxLength={
+            opts?.secondaryIdent
+              ? SECONDARY_IDENTIFICACION_MAX_LENGTH
+              : PERSON_FIELD_LIMITS.identificacion
           }
-        >
-          <IdentityInput
-            tipoDoc={person.tipoDoc ?? 'V'}
-            identificacion={person.identificacion ?? ''}
-            maxLength={
-              opts?.secondaryIdent
-                ? SECONDARY_IDENTIFICACION_MAX_LENGTH
-                : PERSON_FIELD_LIMITS.identificacion
-            }
-            loading={Boolean(lookupLoading[prefix])}
-            onTipoDocChange={(v) => {
-              lastLookupCid.current[prefix] = '';
-              setPerson({ tipoDoc: v });
-            }}
-            onIdentificacionChange={(v) => {
-              lastLookupCid.current[prefix] = '';
-              lastFuneralCedula.current[prefix] = '';
-              manualIdentEdit.current[prefix] = true;
-              setPerson({ identificacion: clipPersonField('identificacion', v) });
-            }}
-            onIdentificacionBlur={
-              checkFuneralFlow
-                ? (id) => {
+          loading={Boolean(lookupLoading[prefix])}
+          onTipoDocChange={(v) => {
+            lastLookupCid.current[prefix] = '';
+            setPerson({ tipoDoc: v });
+          }}
+          onIdentificacionChange={(v) => {
+            lastLookupCid.current[prefix] = '';
+            lastFuneralCedula.current[prefix] = '';
+            manualIdentEdit.current[prefix] = true;
+            setPerson({ identificacion: clipPersonField('identificacion', v) });
+          }}
+          onIdentificacionBlur={
+            isRcvEmision
+              ? (id) => {
                   const docs = useWizardStore.getState().documents;
                   const ocrIdent = resolveRcvOcrIdentDigits(prefix, docs);
                   if (
@@ -897,192 +897,192 @@ export function EmissionStep() {
                   }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-                : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
-                  ? (id) => {
+              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
+                ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
-                  : undefined
-            }
-          />
-        </Field>
-        <div className="hidden sm:block"></div>
-        <Field anchor={`cli-${prefix}nombre`} label="Nombre *" error={errors[`${prefix}nombre`]}>
-          <Input
-            value={person.nombre ?? ''}
-            onChange={(e) => setPerson({ nombre: clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre) })}
-            placeholder="Nombre"
-            maxLength={PERSON_FIELD_LIMITS.nombre}
-          />
-        </Field>
-        <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
-          <Input
-            value={person.apellido ?? ''}
-            onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
-            placeholder="Apellido"
-            maxLength={PERSON_FIELD_LIMITS.apellido}
-          />
-        </Field>
-        <Field anchor={`cli-${prefix}telefono`} label="Teléfono *" error={errors[`${prefix}telefono`]} hint="11 dígitos · Digitel 0412/0422 · Movistar 0414/0424 · Movilnet 0416/0426 · fijos 02XX">
-          <Input
-            value={formatTelefono(person.telefono ?? '')}
-            onChange={(e) => setPerson({ telefono: formatTelefono(e.target.value) })}
-            placeholder="(0412) 123-4567"
-            type="tel"
-            inputMode="numeric"
-            maxLength={PERSON_FIELD_LIMITS.telefonoDisplay}
-          />
-        </Field>
-        <Field anchor={`cli-${prefix}email`} label="Correo electrónico *" error={errors[`${prefix}email`]}>
-          <Input
-            value={person.email ?? ''}
-            onChange={(e) => setPerson({ email: clipPersonField('email', e.target.value) })}
-            placeholder="correo@ejemplo.com"
-            type="email"
-            inputMode="email"
-            maxLength={PERSON_FIELD_LIMITS.email}
-          />
-        </Field>
-        <PersonLocationFields
-          person={person}
-          setPerson={setPerson}
-          prefix={prefix}
-          errors={errors}
-          estados={catalogs.estados}
-          ciuState={ciuState}
-          catalogsLoading={catalogs.loading}
-          exelixiFlow={exelixiFlow}
+                : undefined
+          }
         />
-        <Field
-          anchor={`cli-${prefix}fechaNac`}
-          label={isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
-          error={errors[`${prefix}fechaNac`]}
-          hint={
-            isJuridica
-              ? undefined
-              : (() => {
+      </Field>
+      <div className="hidden sm:block"></div>
+      <Field anchor={`cli-${prefix}nombre`} label="Nombre *" error={errors[`${prefix}nombre`]}>
+        <Input
+          value={person.nombre ?? ''}
+          onChange={(e) => setPerson({ nombre: clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre) })}
+          placeholder="Nombre"
+          maxLength={PERSON_FIELD_LIMITS.nombre}
+        />
+      </Field>
+      <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
+        <Input
+          value={person.apellido ?? ''}
+          onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
+          placeholder="Apellido"
+          maxLength={PERSON_FIELD_LIMITS.apellido}
+        />
+      </Field>
+      <Field anchor={`cli-${prefix}telefono`} label="Teléfono *" error={errors[`${prefix}telefono`]} hint="11 dígitos · Digitel 0412/0422 · Movistar 0414/0424 · Movilnet 0416/0426 · fijos 02XX">
+        <Input
+          value={formatTelefono(person.telefono ?? '')}
+          onChange={(e) => setPerson({ telefono: formatTelefono(e.target.value) })}
+          placeholder="(0412) 123-4567"
+          type="tel"
+          inputMode="numeric"
+          maxLength={PERSON_FIELD_LIMITS.telefonoDisplay}
+        />
+      </Field>
+      <Field anchor={`cli-${prefix}email`} label="Correo electrónico *" error={errors[`${prefix}email`]}>
+        <Input
+          value={person.email ?? ''}
+          onChange={(e) => setPerson({ email: clipPersonField('email', e.target.value) })}
+          placeholder="correo@ejemplo.com"
+          type="email"
+          inputMode="email"
+          maxLength={PERSON_FIELD_LIMITS.email}
+        />
+      </Field>
+      <PersonLocationFields
+        person={person}
+        setPerson={setPerson}
+        prefix={prefix}
+        errors={errors}
+        estados={catalogs.estados}
+        ciuState={ciuState}
+        catalogsLoading={catalogs.loading}
+        exelixiFlow={exelixiFlow}
+      />
+      <Field
+        anchor={`cli-${prefix}fechaNac`}
+        label={isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
+        error={errors[`${prefix}fechaNac`]}
+        hint={
+          isJuridica
+            ? undefined
+            : (() => {
                 const edad = edadCumplida(person.fechaNac);
                 if (edad == null) return undefined;
                 return edad > 80
                   ? `${edad} años cumplidos · el plan funerario admite hasta 80`
                   : `${edad} años cumplidos`;
               })()
-          }
-        >
-          <Input
-            value={person.fechaNac ?? ''}
-            onChange={(e) => setPerson({ fechaNac: e.target.value })}
-            type="date"
-            max={new Date().toISOString().split('T')[0]}
-          />
-        </Field>
-        {!isJuridica && (
-          <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
-            <SearchSelect
-              value={person.sexo}
-              options={
-                catalogs.sexos.length > 0
-                  ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
-                  : [
-                    { value: 'Femenino', label: 'Femenino' },
+        }
+      >
+        <Input
+          value={person.fechaNac ?? ''}
+          onChange={(e) => setPerson({ fechaNac: e.target.value })}
+          type="date"
+          max={new Date().toISOString().split('T')[0]}
+        />
+      </Field>
+      {!isJuridica && (
+        <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
+          <SearchSelect
+            value={person.sexo}
+            options={
+              catalogs.sexos.length > 0
+                ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
+                : [
+                    { value: 'Femenino',  label: 'Femenino'  },
                     { value: 'Masculino', label: 'Masculino' },
                   ]
-              }
-              onChange={(value) => setPerson({ sexo: value })}
-              placeholder="— Seleccionar —"
-              loading={catalogs.loading}
-            />
-          </Field>
-        )}
-        {opts?.funeralInsured && (
-          <>
-            <Field
-              anchor={`cli-${prefix}estatura`}
-              label="Estatura *"
-              error={errors[`${prefix}estatura`]}
-              hint="Altura (mts.)"
-            >
-              <Input
-                value={person.estatura ?? ''}
-                onChange={(e) => setPerson({ estatura: e.target.value.replace(/[^0-9.,]/g, '') })}
-                placeholder="1.70"
-                inputMode="decimal"
-              />
-            </Field>
-            <Field
-              anchor={`cli-${prefix}peso`}
-              label="Peso *"
-              error={errors[`${prefix}peso`]}
-              hint="Peso (kg.)"
-            >
-              <Input
-                value={person.peso ?? ''}
-                onChange={(e) => setPerson({ peso: e.target.value.replace(/[^0-9.,]/g, '') })}
-                placeholder="70"
-                inputMode="decimal"
-              />
-            </Field>
-          </>
-        )}
-        {!isJuridica && (
-          <Field anchor={`cli-${prefix}estadoCivil`} label="Estado Civil *" error={errors[`${prefix}estadoCivil`]}>
-            <SearchSelect
-              value={person.estadoCivil}
-              options={
-                catalogs.estadosCivil.length > 0
-                  ? catalogs.estadosCivil.map((s) => ({ value: String(s.label), label: s.label }))
-                  : [
-                    { value: 'Soltero(a)', label: 'Soltero(a)' },
-                    { value: 'Casado(a)', label: 'Casado(a)' },
-                    { value: 'Divorciado(a)', label: 'Divorciado(a)' },
-                    { value: 'Viudo(a)', label: 'Viudo(a)' },
-                  ]
-              }
-              onChange={(value) => setPerson({ estadoCivil: value })}
-              placeholder="— Seleccionar —"
-              loading={catalogs.loading}
-            />
-          </Field>
-        )}
-        <div className="hidden sm:block"></div>
-        <Field anchor={`cli-${prefix}direccion`} label="Dirección *" error={errors[`${prefix}direccion`]} full>
-          <Textarea
-            value={person.direccion ?? ''}
-            onChange={(e) => setPerson({ direccion: clipPersonField('direccion', e.target.value) })}
-            placeholder="Dirección completa"
-            rows={3}
-            maxLength={PERSON_FIELD_LIMITS.direccion}
+            }
+            onChange={(value) => setPerson({ sexo: value })}
+            placeholder="— Seleccionar —"
+            loading={catalogs.loading}
           />
         </Field>
-        {prefix === 'tom_' && isRcvEmision && showProfesion && (
-          <Field anchor="cli-tom_profesion" label="Profesión *" error={errors.tom_profesion}>
-            <SearchSelect
-              value={person.cprofesion ?? ''}
-              options={catalogs.profesiones.map((o) => ({ value: o.code, label: o.label }))}
-              onChange={(code, label) => {
-                setPerson({ cprofesion: code, xprofesion: label });
-              }}
-              placeholder="— Seleccionar —"
-              loading={catalogs.loading}
-              noOptionsText="Sin profesiones disponibles"
+      )}
+      {opts?.funeralInsured && (
+        <>
+          <Field
+            anchor={`cli-${prefix}estatura`}
+            label="Estatura *"
+            error={errors[`${prefix}estatura`]}
+            hint="Altura (mts.)"
+          >
+            <Input
+              value={person.estatura ?? ''}
+              onChange={(e) => setPerson({ estatura: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder="1.70"
+              inputMode="decimal"
             />
           </Field>
-        )}
-        {prefix === 'tom_' && isRcvEmision && showActividad && (
-          <Field label="Actividad económica *" error={errors.tom_profesion}>
-            <SearchSelect
-              value={person.cactividad ?? ''}
-              options={catalogs.actividades.map((o) => ({ value: o.code, label: o.label }))}
-              onChange={(code, label) => {
-                setPerson({ cactividad: code, xactividad: label });
-              }}
-              placeholder="— Seleccionar (si no indicó profesión) —"
-              loading={catalogs.loading}
-              noOptionsText="Sin actividades disponibles"
+          <Field
+            anchor={`cli-${prefix}peso`}
+            label="Peso *"
+            error={errors[`${prefix}peso`]}
+            hint="Peso (kg.)"
+          >
+            <Input
+              value={person.peso ?? ''}
+              onChange={(e) => setPerson({ peso: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder="70"
+              inputMode="decimal"
             />
           </Field>
-        )}
-      </div>
-    );
+        </>
+      )}
+      {!isJuridica && (
+        <Field anchor={`cli-${prefix}estadoCivil`} label="Estado Civil *" error={errors[`${prefix}estadoCivil`]}>
+          <SearchSelect
+            value={person.estadoCivil}
+            options={
+              catalogs.estadosCivil.length > 0
+                ? catalogs.estadosCivil.map((s) => ({ value: String(s.label), label: s.label }))
+                : [
+                    { value: 'Soltero(a)',     label: 'Soltero(a)'     },
+                    { value: 'Casado(a)',      label: 'Casado(a)'      },
+                    { value: 'Divorciado(a)',  label: 'Divorciado(a)'  },
+                    { value: 'Viudo(a)',       label: 'Viudo(a)'       },
+                  ]
+            }
+            onChange={(value) => setPerson({ estadoCivil: value })}
+            placeholder="— Seleccionar —"
+            loading={catalogs.loading}
+          />
+        </Field>
+      )}
+      <div className="hidden sm:block"></div>
+      <Field anchor={`cli-${prefix}direccion`} label="Dirección *" error={errors[`${prefix}direccion`]} full>
+        <Textarea
+          value={person.direccion ?? ''}
+          onChange={(e) => setPerson({ direccion: clipPersonField('direccion', e.target.value) })}
+          placeholder="Dirección completa"
+          rows={3}
+          maxLength={PERSON_FIELD_LIMITS.direccion}
+        />
+      </Field>
+      {prefix === 'tom_' && isRcvEmision && showProfesion && (
+        <Field anchor="cli-tom_profesion" label="Profesión *" error={errors.tom_profesion}>
+          <SearchSelect
+            value={person.cprofesion ?? ''}
+            options={catalogs.profesiones.map((o) => ({ value: o.code, label: o.label }))}
+            onChange={(code, label) => {
+              setPerson({ cprofesion: code, xprofesion: label });
+            }}
+            placeholder="— Seleccionar —"
+            loading={catalogs.loading}
+            noOptionsText="Sin profesiones disponibles"
+          />
+        </Field>
+      )}
+      {prefix === 'tom_' && isRcvEmision && showActividad && (
+        <Field label="Actividad económica *" error={errors.tom_profesion}>
+          <SearchSelect
+            value={person.cactividad ?? ''}
+            options={catalogs.actividades.map((o) => ({ value: o.code, label: o.label }))}
+            onChange={(code, label) => {
+              setPerson({ cactividad: code, xactividad: label });
+            }}
+            placeholder="— Seleccionar (si no indicó profesión) —"
+            loading={catalogs.loading}
+            noOptionsText="Sin actividades disponibles"
+          />
+        </Field>
+      )}
+    </div>
+  );
   };
 
   return (
@@ -1236,9 +1236,9 @@ export function EmissionStep() {
                           catalogs.sexos.length
                             ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
                             : [
-                              { value: 'Masculino', label: 'Masculino' },
-                              { value: 'Femenino', label: 'Femenino' },
-                            ]
+                                { value: 'Masculino', label: 'Masculino' },
+                                { value: 'Femenino', label: 'Femenino' },
+                              ]
                         }
                         onChange={(value) => patchFuneralBeneficiario(idx, { sexo: value })}
                         placeholder="— Seleccionar —"

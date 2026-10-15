@@ -26,8 +26,8 @@ import {
 import { canNavigateToStep, getDefaultRequiredDocs } from './wizard-navigation';
 import { getProductConfig } from './product';
 import { BUILDER_PRODUCT_STORAGE_KEY, isExelixiCatalogFlow, ensureExelixiFlowQueryParam } from './exelixi-catalog';
-import { applyWizardStepFromUrl, defaultStepForModule, stepToModuleOrder } from './wizard-step';
 import { ensureCotizadorFlowQueryParam, isCotizadorFlow } from './cotizador-flow';
+import { applyWizardStepFromUrl, defaultStepForModule, stepToModuleOrder } from './wizard-step';
 import {
   enrichBridgePayloadForSave,
   extractActorMetadataFromBridgeData,
@@ -139,7 +139,7 @@ function getModuleTokenKey(): string {
 /** Flow (session/save/done): misma base que NexusGuard (GCIA → nexus-api.exelixitech.com). */
 const bridgeHost = () =>
   resolveNexusApiUrl(import.meta.env?.VITE_NEXUS_API_URL as string | undefined);
-const QUERY_KEY = 'sid';
+const QUERY_KEY   = 'sid';
 
 // ── Helpers ─────────────────────────────────────────────────────────────────
 function getSidFromUrl(): string | null {
@@ -222,11 +222,11 @@ async function fetchJson<T>(url: string, init?: RequestInit): Promise<T> {
 // ── Estado del bridge ───────────────────────────────────────────────────────
 interface BridgeAPI {
   active: boolean;
-  sid: string | null;
-  order: number | null;
-  ready: Promise<void>;
+  sid:    string | null;
+  order:  number | null;
+  ready:  Promise<void>;
   hydrate: () => Promise<void>;
-  save: (extra?: Record<string, unknown>) => Promise<void>;
+  save:    (extra?: Record<string, unknown>) => Promise<void>;
   advance: (extra?: Record<string, unknown>) => Promise<{ finished: boolean; nextUrl?: string }>;
   navigateToStep: (targetStep: number) => Promise<boolean>;
 }
@@ -240,7 +240,7 @@ declare global {
 
 // ── Implementación ──────────────────────────────────────────────────────────
 function makeBridge(): BridgeAPI {
-  const sid = getSidFromUrl();
+  const sid   = getSidFromUrl();
   const order = moduleOrder();
   const active = Boolean(sid && order);
 
@@ -312,49 +312,54 @@ function makeBridge(): BridgeAPI {
   };
 
   const hydrate = async () => {
-    if (active && sid) {
-      try {
-        const r = await fetchJson<{ success: boolean; data: { data: Record<string, unknown> } }>(
-          `${bridgeHost()}/api/flow/session/${sid}`,
-        );
-        if (r?.data?.data) {
-          applyHydration(r.data.data);
-          const urlToken = getNexusTokenFromUrl();
-          const sessionToken = r.data.data.nexus_token;
-          const moduleKey = getModuleTokenKey();
-          const stored = sessionStorage.getItem(moduleKey);
-          if (sessionToken && typeof sessionToken === 'string' && !stored) {
-            sessionStorage.setItem(moduleKey, sessionToken);
-          } else if (!stored && urlToken) {
-            sessionStorage.setItem(moduleKey, urlToken);
-          }
-          const sessionProduct = r.data.data.product;
-          if (sessionProduct === 'rcv' || sessionProduct === 'funerario' || sessionProduct === 'patrimoniales' || sessionProduct === 'bien') {
-            try { sessionStorage.setItem('exelixi_product', String(sessionProduct)); } catch { /* ignore */ }
-          }
-          if (r.data.data.exelixiCatalogFlow) {
-            ensureExelixiFlowQueryParam(true);
-          }
-          if (r.data.data.cotizadorFlow) {
-            ensureCotizadorFlowQueryParam(true);
-          }
-          const builderProduct = r.data.data.builderProduct;
-          if (builderProduct && typeof builderProduct === 'object') {
-            try {
-              sessionStorage.setItem(BUILDER_PRODUCT_STORAGE_KEY, JSON.stringify(builderProduct));
-            } catch { /* ignore */ }
-          }
-        }
-        console.info('[bridge] hydrated session', sid);
-      } catch (e) {
-        console.warn('[bridge] hydrate failed', e);
-      }
-    }
-
     // Hidratación local desde snapshot de handoff
     const local = readFlowHandoff();
     if (local) {
       applyHydration(local);
+    }
+
+    if (!active || !sid) return;
+    try {
+      const r = await fetchJson<{ success: boolean; data: { data: Record<string, unknown> } }>(
+        `${bridgeHost()}/api/flow/session/${sid}`,
+      );
+      if (r?.data?.data) {
+        applyHydration(r.data.data);
+        // Solo guardar en sessionStorage si este módulo NO tiene su propio
+        // token en la URL — evita sobreescribir con el token de otro módulo
+        const urlToken = getNexusTokenFromUrl();
+        const sessionToken = r.data.data.nexus_token;
+        const moduleKey = getModuleTokenKey();
+        const stored = sessionStorage.getItem(moduleKey);
+        if (sessionToken && typeof sessionToken === 'string' && !stored) {
+          sessionStorage.setItem(moduleKey, sessionToken);
+        } else if (!stored && urlToken) {
+          sessionStorage.setItem(moduleKey, urlToken);
+        }
+        // Propaga el producto (rcv | funerario) entre módulos: getProductConfig()
+        // lo lee desde sessionStorage, así no depende de que la URL lo arrastre.
+        const sessionProduct = r.data.data.product;
+        if (sessionProduct === 'rcv' || sessionProduct === 'funerario' || sessionProduct === 'patrimoniales' || sessionProduct === 'bien') {
+          try { sessionStorage.setItem('exelixi_product', String(sessionProduct)); } catch { /* ignore */ }
+        }
+        if (r.data.data.exelixiCatalogFlow) {
+          ensureExelixiFlowQueryParam(true);
+        }
+        if (r.data.data.cotizadorFlow) {
+          ensureCotizadorFlowQueryParam(true);
+        }
+        const builderProduct = r.data.data.builderProduct;
+        if (builderProduct && typeof builderProduct === 'object') {
+          try {
+            sessionStorage.setItem(BUILDER_PRODUCT_STORAGE_KEY, JSON.stringify(builderProduct));
+          } catch { /* ignore */ }
+        }
+      }
+      // eslint-disable-next-line no-console
+      console.info('[bridge] hydrated session', sid);
+    } catch (e) {
+      // eslint-disable-next-line no-console
+      console.warn('[bridge] hydrate failed', e);
     }
   };
 
@@ -575,7 +580,7 @@ async function init() {
 
   // SIEMPRE exponer las funciones globales del bridge en window
   if (typeof window !== 'undefined') {
-    window.__bridge = bridge;
+    window.__bridge        = bridge;
     window.__bridgeAdvance = (extra) => bridge.advance(extra ?? {}).then(() => undefined);
     window.__bridgeNavigateStep = (targetStep) => bridge.navigateToStep(targetStep);
   }
@@ -591,6 +596,11 @@ async function init() {
 
     bridge.ready = hydratePromise;
 
+    // Auto-advance para módulos cuyo "fin" es un cambio de step en el store:
+    //   OCR (1):    step 1 → 2
+    //   Pagos (4):  step 5 → 6 (success)
+    // Para Formulario (2) y Emisión (3) el avance se dispara desde el App.tsx
+    // cuando el botón "Continuar" / "Confirmar plan" / "Guardar" tiene éxito.
     let lastStep: number | undefined;
     useWizardStore.subscribe((s: { step?: number }) => {
       const step = s?.step;
@@ -600,19 +610,21 @@ async function init() {
 
       // OCR completado: step pasó de 1 → 2
       if (bridge.order === 1 && prev === 1 && step === 2) {
-        bridge.advance().catch(() => { });
+        bridge.advance().catch(() => {});
       }
       // Pagos completado: step llegó a 6 (success)
       if (bridge.order === 4 && step === 6) {
-        bridge.advance().catch(() => { });
+        // No hay siguiente módulo; sólo registra el cierre del flujo.
+        bridge.advance().catch(() => {});
       }
     });
 
+    // eslint-disable-next-line no-console
     console.info('[bridge] active — sid=' + bridge.sid + ' order=' + bridge.order);
   } else if (typeof window !== 'undefined') {
     const local = readFlowHandoff();
     if (local) {
-      bridge.hydrate().catch(() => { });
+      bridge.hydrate().catch(() => {});
     }
   }
 

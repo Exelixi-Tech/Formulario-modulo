@@ -241,10 +241,10 @@ export default function App() {
 
   const meta = cotizadorRcv
     ? {
-      eyebrow: 'Paso 01 · Vehículo',
-      title: 'Datos del vehículo',
-      sub: 'Ingresa año, marca, modelo, versión y uso del vehículo para ver los planes RCV.',
-    }
+        eyebrow: 'Paso 01 · Vehículo',
+        title: 'Datos del vehículo',
+        sub: 'Ingresa año, marca, modelo, versión y uso del vehículo para ver los planes RCV.',
+      }
     : getStepMeta(product, localStep);
 
   return (
