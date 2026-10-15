@@ -470,7 +470,6 @@ function makeBridge(): BridgeAPI {
         }
         setTimeout(() => { window.location.href = target; }, 900);
       }
-      fallbackAdvanceToEmision(extra);
       return out ?? { finished: true };
     } catch (e) {
       console.warn('[bridge] advance failed', e);

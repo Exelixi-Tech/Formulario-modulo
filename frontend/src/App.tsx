@@ -277,33 +277,35 @@ export default function App() {
                 </div>
 
                 {/* Switcher rápido de pruebas (RCV / Funerario / Patrimoniales) */}
-                <div className="flex items-center gap-1.5 p-1 rounded-full bg-slate-100/90 border border-slate-200/80 shadow-sm backdrop-blur-sm">
-                  {(['rcv', 'funerario', 'patrimoniales'] as const).map((p) => {
-                    const active = product.id === p || (p === 'patrimoniales' && product.id === 'bien');
-                    const labels: Record<string, string> = {
-                      rcv: 'RCV',
-                      funerario: 'Funerario',
-                      patrimoniales: 'Patrimonial',
-                    };
-                    return (
-                      <button
-                        key={p}
-                        type="button"
-                        onClick={() => {
-                          persistProductFromHints({ product: p });
-                          window.location.search = `?product=${p}${localStep === 3 ? '&step=3' : ''}`;
-                        }}
-                        className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${active
-                          ? 'bg-[#0F1A5A] text-white shadow-sm'
-                          : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
-                          }`}
-                        title={`Probar flujo ${labels[p]}`}
-                      >
-                        {labels[p]}
-                      </button>
-                    );
-                  })}
-                </div>
+                {import.meta.env.DEV && (
+                  <div className="flex items-center gap-1.5 p-1 rounded-full bg-slate-100/90 border border-slate-200/80 shadow-sm backdrop-blur-sm">
+                    {(['rcv', 'funerario', 'patrimoniales'] as const).map((p) => {
+                      const active = product.id === p || (p === 'patrimoniales' && product.id === 'bien');
+                      const labels: Record<string, string> = {
+                        rcv: 'RCV',
+                        funerario: 'Funerario',
+                        patrimoniales: 'Patrimonial',
+                      };
+                      return (
+                        <button
+                          key={p}
+                          type="button"
+                          onClick={() => {
+                            persistProductFromHints({ product: p });
+                            window.location.search = `?product=${p}${localStep === 3 ? '&step=3' : ''}`;
+                          }}
+                          className={`px-3 py-1 rounded-full text-xs font-bold transition-all ${active
+                            ? 'bg-[#0F1A5A] text-white shadow-sm'
+                            : 'text-slate-600 hover:text-slate-900 hover:bg-white/60'
+                            }`}
+                          title={`Probar flujo ${labels[p]}`}
+                        >
+                          {labels[p]}
+                        </button>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
             </header>
 
