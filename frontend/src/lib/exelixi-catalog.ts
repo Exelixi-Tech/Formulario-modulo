@@ -355,11 +355,21 @@ export function applyExelixiOcrHandoff(
   return true;
 }
 
-/** Siguiente paso: módulo emisión (planes product-emission). */
+import { isPatrimoniales } from './product';
+
+/** Siguiente paso: módulo emisión (planes product-emission o La Mundial). */
 export function getEmisionContinueUrl(): string {
   const configured = import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined;
   const base = (configured?.replace(/\/$/, '') || '/emision').replace(/\/$/, '');
-  const params = new URLSearchParams({ flow: 'exelixi-catalog', wizardStep: '4' });
+  const isCatalog = isExelixiCatalogFlow();
+  const isPat = isPatrimoniales();
+  // Fuera de patrimoniales se conserva el comportamiento original (mismo orden de parametros).
+  const params = isCatalog || !isPat
+    ? new URLSearchParams({ flow: 'exelixi-catalog', wizardStep: '4' })
+    : new URLSearchParams({ wizardStep: '4' });
+  if (isPat) {
+    params.set('product', sessionStorage.getItem('exelixi_product') || 'patrimoniales');
+  }
 
   try {
     const current = new URL(window.location.href);
@@ -383,7 +393,9 @@ export function continueToEmisionModule(snapshot?: Partial<ExelixiWizardHandoff>
   }
 
   if (typeof window.__bridgeAdvance === 'function') {
-    void window.__bridgeAdvance({ exelixiCatalogFlow: true });
+    void window.__bridgeAdvance(
+      isPatrimoniales() ? (snapshot as Record<string, unknown> | undefined) : { exelixiCatalogFlow: true },
+    );
     return;
   }
 
