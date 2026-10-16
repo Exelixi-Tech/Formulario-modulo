@@ -24,7 +24,7 @@ import {
   getNexusTokenFromUrl,
 } from './nexus-token-client';
 import { canNavigateToStep, getDefaultRequiredDocs } from './wizard-navigation';
-import { getProductConfig } from './product';
+import { getProductConfig, isPatrimoniales } from './product';
 import { BUILDER_PRODUCT_STORAGE_KEY, isExelixiCatalogFlow, ensureExelixiFlowQueryParam } from './exelixi-catalog';
 import { ensureCotizadorFlowQueryParam, isCotizadorFlow } from './cotizador-flow';
 import { applyWizardStepFromUrl, defaultStepForModule, stepToModuleOrder } from './wizard-step';
@@ -33,9 +33,17 @@ import {
   extractActorMetadataFromBridgeData,
   rememberMarketplaceActorFromToken,
 } from './sso-metadata';
-import { persistFlowHandoff } from './flow-handoff';
 import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-flow';
 import { toast } from '../store/toastStore';
+import { persistFlowHandoff, readFlowHandoff, encodeFlowHandoff } from './flow-handoff';
+import { mergeExelixiWizardHandoff } from './exelixi-wizard-handoff';
+
+/** Las ampliaciones del handoff (snapshot en sessionStorage, merge Exélixi, hidratación local) son solo de patrimoniales. */
+function isPatrimonialHandoff(state?: Record<string, unknown> | null): boolean {
+  if (isPatrimoniales()) return true;
+  const p = state?.product;
+  return p === 'patrimoniales' || p === 'bien';
+}
 
 function isPagosModuleUrl(url: string): boolean {
   try {
@@ -252,9 +260,9 @@ function makeBridge(): BridgeAPI {
     }
     // Limpieza de datos fantasma y bloqueo de producto en la sesión backend
     const isCatalogFlow = isExelixiCatalogFlow();
-    const prod = sessionStorage.getItem('exelixi_product') || 'rcv';
+    const prod = sessionStorage.getItem('exelixi_product') || (isPatrimoniales() ? 'patrimoniales' : 'rcv');
     if (!isCatalogFlow) {
-      if (prod === 'funerario' || prod === 'patrimoniales') {
+      if (prod === 'funerario') {
         delete out.vehicle;
       } else if (prod === 'rcv') {
         delete out.funeral;
@@ -278,6 +286,7 @@ function makeBridge(): BridgeAPI {
     if (order !== 1) delete out.documents;
     const payload = enrichBridgePayloadForSave(out, getModuleTokenKey());
     persistFlowHandoff(payload);
+    if (isPatrimonialHandoff(payload)) mergeExelixiWizardHandoff(payload);
     return payload;
   };
 
@@ -310,6 +319,12 @@ function makeBridge(): BridgeAPI {
   };
 
   const hydrate = async () => {
+    // Hidratación local desde snapshot de handoff (solo patrimoniales)
+    const local = readFlowHandoff();
+    if (local && isPatrimonialHandoff(local)) {
+      applyHydration(local);
+    }
+
     if (!active || !sid) return;
     try {
       const r = await fetchJson<{ success: boolean; data: { data: Record<string, unknown> } }>(
@@ -331,8 +346,8 @@ function makeBridge(): BridgeAPI {
         // Propaga el producto (rcv | funerario) entre módulos: getProductConfig()
         // lo lee desde sessionStorage, así no depende de que la URL lo arrastre.
         const sessionProduct = r.data.data.product;
-        if (sessionProduct === 'rcv' || sessionProduct === 'funerario' || sessionProduct === 'patrimoniales') {
-          try { sessionStorage.setItem('exelixi_product', sessionProduct); } catch { /* ignore */ }
+        if (sessionProduct === 'rcv' || sessionProduct === 'funerario' || sessionProduct === 'patrimoniales' || sessionProduct === 'bien') {
+          try { sessionStorage.setItem('exelixi_product', String(sessionProduct)); } catch { /* ignore */ }
         }
         if (r.data.data.exelixiCatalogFlow) {
           ensureExelixiFlowQueryParam(true);
@@ -356,24 +371,85 @@ function makeBridge(): BridgeAPI {
   };
 
   const save = async (extra: Record<string, unknown> = {}) => {
+    const state = { ...collectState(), ...extra };
+    if (isPatrimonialHandoff(state)) {
+      persistFlowHandoff(state);
+      mergeExelixiWizardHandoff(state);
+    }
     if (!active || !sid) return;
     try {
       await fetchJson(`${bridgeHost()}/api/flow/save/${sid}`, {
         method: 'POST',
-        body: JSON.stringify({ ...collectState(), ...extra }),
+        body: JSON.stringify(state),
       });
     } catch (e) { console.warn('[bridge] save failed', e); }
   };
 
+  // Solo desarrollo local (puertos distintos): en QA/prod los modulos comparten origen.
+  const isLocalDev = () => typeof window !== 'undefined'
+    && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1');
+
+  const fallbackAdvanceToEmision = (extra: Record<string, unknown> = {}) => {
+    const state = { ...collectState(), ...extra };
+    persistFlowHandoff(state);
+    mergeExelixiWizardHandoff(state);
+
+    const emisionBase = (
+      (import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined)?.replace(/\/$/, '')
+      || (typeof window !== 'undefined' && (window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') ? 'http://localhost:5183' : '/emision')
+    );
+    const params = new URLSearchParams();
+    if (sid) params.set('sid', sid);
+    const token =
+      getNexusTokenFromUrl()
+      || (typeof sessionStorage !== 'undefined'
+        ? sessionStorage.getItem(getModuleTokenKey())
+        : null);
+    if (token) params.set('nexus_token', token);
+    const product = sessionStorage.getItem('exelixi_product') || getProductConfig().id || 'rcv';
+    params.set('product', product);
+    if (isExelixiCatalogFlow()) {
+      params.set('flow', 'exelixi-catalog');
+    }
+    if (isCotizadorFlow()) {
+      params.set('flow', 'cotizador');
+    }
+    params.set('wizardStep', '4');
+
+    // El estado del wizard (cedula, nombres) NO viaja en la URL fuera de desarrollo local:
+    // queda en sessionStorage (mismo origen /formulario -> /emision).
+    if (isLocalDev()) {
+      const encoded = encodeFlowHandoff(state);
+      if (encoded) {
+        params.set('flow_handoff', encoded);
+      }
+    }
+
+    const targetUrl = `${emisionBase}/?${params.toString()}`;
+    setTimeout(() => {
+      window.location.href = targetUrl;
+    }, 600);
+  };
+
   const advance = async (extra: Record<string, unknown> = {}) => {
-    if (!active || !sid || !order) return { finished: true };
+    const currentState = { ...collectState(), ...extra };
+    if (isPatrimonialHandoff(currentState)) {
+      persistFlowHandoff(currentState);
+      mergeExelixiWizardHandoff(currentState);
+    }
+
+    if (!active || !sid || !order) {
+      // Sin bridge/sid: solo en desarrollo local se avanza por navegacion directa.
+      if (isLocalDev()) fallbackAdvanceToEmision(extra);
+      return { finished: true };
+    }
     try {
       const r = await fetchJson<{
         success: boolean;
         data: { finished: boolean; nextUrl?: string };
       }>(`${bridgeHost()}/api/flow/done/${sid}?from=${order}`, {
         method: 'POST',
-        body: JSON.stringify({ ...collectState(), ...extra }),
+        body: JSON.stringify(currentState),
       });
       const out = r?.data;
       if (out?.nextUrl) {
@@ -517,10 +593,16 @@ async function init() {
     if (nexusToken) {
       const autoSid = await tryAutoStart(nexusToken);
       if (autoSid) {
-        // Re-crear el bridge ahora que el sid está en la URL
         bridge = makeBridge();
       }
     }
+  }
+
+  // SIEMPRE exponer las funciones globales del bridge en window
+  if (typeof window !== 'undefined') {
+    window.__bridge        = bridge;
+    window.__bridgeAdvance = (extra) => bridge.advance(extra ?? {}).then(() => undefined);
+    window.__bridgeNavigateStep = (targetStep) => bridge.navigateToStep(targetStep);
   }
 
   if (bridge.active && typeof window !== 'undefined') {
@@ -533,35 +615,37 @@ async function init() {
     });
 
     bridge.ready = hydratePromise;
-    window.__bridge        = bridge;
-    window.__bridgeAdvance = (extra) => bridge.advance(extra ?? {}).then(() => undefined);
-    window.__bridgeNavigateStep = (targetStep) => bridge.navigateToStep(targetStep);
 
-  // Auto-advance para módulos cuyo "fin" es un cambio de step en el store:
-  //   OCR (1):    step 1 → 2
-  //   Pagos (4):  step 5 → 6 (success)
-  // Para Formulario (2) y Emisión (3) el avance se dispara desde el App.tsx
-  // cuando el botón "Continuar" / "Confirmar plan" / "Guardar" tiene éxito.
-  let lastStep: number | undefined;
-  useWizardStore.subscribe((s: { step?: number }) => {
-    const step = s?.step;
-    if (typeof step !== 'number' || step === lastStep) return;
-    const prev = lastStep;
-    lastStep = step;
+    // Auto-advance para módulos cuyo "fin" es un cambio de step en el store:
+    //   OCR (1):    step 1 → 2
+    //   Pagos (4):  step 5 → 6 (success)
+    // Para Formulario (2) y Emisión (3) el avance se dispara desde el App.tsx
+    // cuando el botón "Continuar" / "Confirmar plan" / "Guardar" tiene éxito.
+    let lastStep: number | undefined;
+    useWizardStore.subscribe((s: { step?: number }) => {
+      const step = s?.step;
+      if (typeof step !== 'number' || step === lastStep) return;
+      const prev = lastStep;
+      lastStep = step;
 
-    // OCR completado: step pasó de 1 → 2
-    if (bridge.order === 1 && prev === 1 && step === 2) {
-      bridge.advance().catch(() => {});
-    }
-    // Pagos completado: step llegó a 6 (success)
-    if (bridge.order === 4 && step === 6) {
-      // No hay siguiente módulo; sólo registra el cierre del flujo.
-      bridge.advance().catch(() => {});
-    }
-  });
+      // OCR completado: step pasó de 1 → 2
+      if (bridge.order === 1 && prev === 1 && step === 2) {
+        bridge.advance().catch(() => {});
+      }
+      // Pagos completado: step llegó a 6 (success)
+      if (bridge.order === 4 && step === 6) {
+        // No hay siguiente módulo; sólo registra el cierre del flujo.
+        bridge.advance().catch(() => {});
+      }
+    });
 
     // eslint-disable-next-line no-console
     console.info('[bridge] active — sid=' + bridge.sid + ' order=' + bridge.order);
+  } else if (typeof window !== 'undefined') {
+    const local = readFlowHandoff();
+    if (local && isPatrimonialHandoff(local)) {
+      bridge.hydrate().catch(() => {});
+    }
   }
 
   return bridge;
@@ -571,3 +655,4 @@ async function init() {
 // el auto-start se resuelva. El import './lib/bridge' sigue siendo suficiente.
 const bridgePromise = init();
 export default bridgePromise;
+

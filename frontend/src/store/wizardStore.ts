@@ -7,8 +7,8 @@ import type {
   PersonData,
   VehicleData,
   FuneralData,
-  PatrimonialesData,
   FuneralPerson,
+  PatrimonialesData,
   Plan,
   PaymentMethod,
   IssuedPolicy,
@@ -19,6 +19,12 @@ import { buildDiligenciaState, preClasificarDiligencia, type DiligenciaState } f
 import { getProductId } from '../lib/product';
 
 const defaultDoc = (): DocumentState => ({ status: 'idle', progress: 0 });
+
+const defaultPatrimoniales = (): PatrimonialesData => ({
+  datosBien: '',
+  tipo: '',
+  descripcion: '',
+});
 
 const defaultTomador = (): TomadorData => ({
   tipoDoc: 'V',
@@ -72,12 +78,6 @@ const defaultFuneralPerson = (parentesco = ''): FuneralPerson => ({
   fechaNac: '',
   sexo: '',
   parentesco,
-});
-
-const defaultPatrimoniales = (): PatrimonialesData => ({
-  datosBien: '',
-  tipo: '',
-  descripcion: '',
 });
 
 const defaultFuneral = (): FuneralData => ({

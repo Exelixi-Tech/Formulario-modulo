@@ -18,11 +18,7 @@ const TIPO_OPTIONS = [
 ];
 
 export function PatrimonialesStep() {
-  const patrimoniales = useWizardStore((s) => s.patrimoniales) ?? {
-    datosBien: '',
-    tipo: '',
-    descripcion: '',
-  };
+  const patrimoniales = useWizardStore((s) => s.patrimoniales);
   const setPatrimoniales = useWizardStore((s) => s.setPatrimoniales);
 
   const [errors, setErrors] = useState<PatrimonialesErrors>({});

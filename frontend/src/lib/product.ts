@@ -26,6 +26,8 @@ export interface ProductConfig {
   exelixiCatalog?: boolean;
   builderProductId?: string;
   useFuneralStep?: boolean;
+  usesPatrimonialesStep?: boolean;
+  usesBienStep?: boolean;
   skipPersonasStep?: boolean;
 }
 
@@ -46,14 +48,23 @@ export const PRODUCTS: Record<ProductId, ProductConfig> = {
   },
   patrimoniales: {
     id: 'patrimoniales',
-    label: 'Patrimoniales',
+    label: 'Patrimonial',
     fullLabel: 'Seguro Patrimonial',
-    cramo: 20,
+    cramo: 28,
     hasVehicle: false,
+    usesPatrimonialesStep: true,
+  },
+  bien: {
+    id: 'patrimoniales',
+    label: 'Patrimonial',
+    fullLabel: 'Seguro Patrimonial',
+    cramo: 28,
+    hasVehicle: false,
+    usesPatrimonialesStep: true,
   },
 };
 
-const VALID_PRODUCTS: ProductId[] = ['rcv', 'funerario', 'patrimoniales'];
+const VALID_PRODUCTS: ProductId[] = ['rcv', 'funerario', 'patrimoniales', 'bien'];
 const STORAGE_KEY = 'exelixi_product';
 
 export interface ProductDetectHints {
@@ -64,33 +75,44 @@ export interface ProductDetectHints {
 }
 
 /**
- * Detecta rcv|funerario y lo persiste en sessionStorage (Nexus verify / bridge).
+ * Detecta rcv|funerario|patrimoniales y lo persiste en sessionStorage (Nexus verify / bridge).
  * @param {ProductDetectHints} [hints]
  * @returns {ProductId | null}
  */
 export function persistProductFromHints(hints?: ProductDetectHints): ProductId | null {
-  const raw = hints?.product != null ? String(hints.product).trim() : '';
-  if (VALID_PRODUCTS.includes(raw as ProductId)) {
-    try { sessionStorage.setItem(STORAGE_KEY, raw); } catch { /* ignore */ }
-    return raw as ProductId;
+  if (hints?.product === 'patrimoniales' || hints?.product === 'patrimonial' || hints?.product === 'bien' || hints?.product === 'bienes') {
+    try { sessionStorage.setItem(STORAGE_KEY, 'patrimoniales'); } catch { /* ignore */ }
+    return 'patrimoniales';
+  }
+  if (hints?.product === 'funerario') {
+    try { sessionStorage.setItem(STORAGE_KEY, 'funerario'); } catch { /* ignore */ }
+    return 'funerario';
+  }
+  if (hints?.product === 'rcv') {
+    try { sessionStorage.setItem(STORAGE_KEY, 'rcv'); } catch { /* ignore */ }
+    return 'rcv';
   }
   if (hints?.url) {
     try {
       const fromUrl = new URL(hints.url, window.location.origin).searchParams.get('product');
-      if (fromUrl && VALID_PRODUCTS.includes(fromUrl as ProductId)) {
+      if (fromUrl === 'patrimoniales' || fromUrl === 'patrimonial' || fromUrl === 'bien' || fromUrl === 'bienes') {
+        sessionStorage.setItem(STORAGE_KEY, 'patrimoniales');
+        return 'patrimoniales';
+      }
+      if (fromUrl === 'funerario' || fromUrl === 'rcv') {
         sessionStorage.setItem(STORAGE_KEY, fromUrl);
         return fromUrl as ProductId;
       }
     } catch { /* ignore */ }
   }
   const label = `${hints?.nombre ?? ''} ${hints?.moduloNombre ?? ''}`.toLowerCase();
+  if (label.includes('patrimon')) {
+    try { sessionStorage.setItem(STORAGE_KEY, 'patrimoniales'); } catch { /* ignore */ }
+    return 'patrimoniales';
+  }
   if (label.includes('funerar')) {
     try { sessionStorage.setItem(STORAGE_KEY, 'funerario'); } catch { /* ignore */ }
     return 'funerario';
-  }
-  if (label.includes('patrimonial')) {
-    try { sessionStorage.setItem(STORAGE_KEY, 'patrimoniales'); } catch { /* ignore */ }
-    return 'patrimoniales';
   }
   return null;
 }
@@ -142,6 +164,13 @@ export function usesFuneralStep(): boolean {
   return isFunerario();
 }
 
+export function usesPatrimonialesStep(): boolean {
+  const cfg = getProductConfig();
+  return cfg.id === 'patrimoniales' || cfg.id === 'bien' || Boolean(cfg.usesPatrimonialesStep) || Boolean(cfg.usesBienStep);
+}
+
+export const usesBienStep = usesPatrimonialesStep;
+
 export function usesVehicleStep(): boolean {
   return getProductConfig().hasVehicle;
 }
@@ -157,8 +186,11 @@ export function isFunerario(): boolean {
 }
 
 export function isPatrimoniales(): boolean {
-  return getProductId() === 'patrimoniales';
+  const p = getProductId();
+  return p === 'patrimoniales' || p === 'bien';
 }
+
+export const isBien = isPatrimoniales;
 
 export function isRcv(): boolean {
   return getProductId() === 'rcv';

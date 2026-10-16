@@ -50,7 +50,9 @@ export function TopStepper() {
           ? [{ n: 3, label: 'Vehículo', Icon: Car }]
           : product.useFuneralStep
             ? [{ n: 3, label: 'Personas', Icon: Users }]
-            : []),
+            : product.usesPatrimonialesStep || product.usesBienStep
+              ? [{ n: 3, label: 'Patrimonial', Icon: Building2 }]
+              : []),
         { n: 4, label: 'Plan', Icon: ShieldCheck },
         { n: 5, label: 'Pago', Icon: CreditCard },
       ]
@@ -59,7 +61,9 @@ export function TopStepper() {
         { n: 2, label: product.hasVehicle ? 'Emisión' : 'Tomador', Icon: UserCog },
         ...(product.hasVehicle
           ? [{ n: 3, label: 'Vehículo', Icon: Car }]
-          : [{ n: 3, label: product.id === 'patrimoniales' ? 'Bien' : 'Personas', Icon: product.id === 'patrimoniales' ? Building2 : Users }]),
+          : product.id === 'patrimoniales' || product.id === 'bien' || product.usesPatrimonialesStep || product.usesBienStep
+            ? [{ n: 3, label: 'Patrimonial', Icon: Building2 }]
+            : [{ n: 3, label: 'Personas', Icon: Users }]),
         { n: 4, label: 'Plan', Icon: ShieldCheck },
         { n: 5, label: 'Pago', Icon: CreditCard },
       ];

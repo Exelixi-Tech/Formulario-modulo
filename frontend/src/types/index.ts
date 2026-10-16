@@ -10,7 +10,15 @@ export type DocType =
 export type { DiligenciaState, TipoDiligencia } from '../lib/diligencia';
 
 /** Producto de seguro que se está suscribiendo en el flujo. */
-export type ProductId = 'rcv' | 'funerario' | 'patrimoniales';
+export type ProductId = 'rcv' | 'funerario' | 'patrimoniales' | 'bien';
+
+export interface PatrimonialesData {
+  datosBien: string;
+  tipo: string;
+  descripcion: string;
+}
+
+export type BienData = PatrimonialesData;
 
 export type DocStatus = 'idle' | 'uploading' | 'processing' | 'done' | 'error';
 
@@ -193,13 +201,6 @@ export interface FuneralData {
   healthQuestionnaireDone?: boolean;
 }
 
-/** Datos del bien asegurado (producto patrimoniales). */
-export interface PatrimonialesData {
-  datosBien: string;
-  tipo: string;
-  descripcion: string;
-}
-
 export interface VehicleData {
   placa: string;
   /** Tipo de placa: nacional (VE), extranjera o binacional (Colombia). */
@@ -279,7 +280,7 @@ export interface WizardState {
   tomador: TomadorData;
   /** Datos del producto Funerario (personas). Solo se usa si product = 'funerario'. */
   funeral: FuneralData;
-  /** Datos del bien (patrimoniales). */
+  /** Datos del bien asegurado cuando product = 'patrimoniales' o flujo de bienes. */
   patrimoniales: PatrimonialesData;
   sameInsured: boolean;
   asegurado: PersonData;
