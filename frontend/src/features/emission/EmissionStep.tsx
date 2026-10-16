@@ -256,6 +256,8 @@ export function EmissionStep() {
   const aseguradoCiudades = useCiudades(asegurado.cestado);
   /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
+  /** Viajero: sin cobertura para indemnizar a un beneficiario, no se piden beneficiarios. */
+  const sinBeneficiarios = skipPolizaVigente;
   /** Ramo donde se busca la póliza vigente: el del producto que manda el SSO. */
   const polizaCramo = polizaVigenteCramo(metadataCanal);
   /** Solo consulta adpoliza (titular/asegurado). No afecta campos del formulario funerario. */
@@ -367,7 +369,7 @@ export function EmissionStep() {
   };
 
   useEffect(() => {
-    if (!checkFuneralFlow) return;
+    if (!checkFuneralFlow || sinBeneficiarios) return;
     if ((funeral.beneficiarios ?? []).length > 0) return;
     if (!(beneficiario.identificacion || beneficiario.nombre)) return;
     setFuneral({
@@ -385,7 +387,7 @@ export function EmissionStep() {
       }],
     });
     setHasBeneficiary(true);
-  }, [checkFuneralFlow, funeral.beneficiarios, beneficiario, setFuneral, setHasBeneficiary]);
+  }, [checkFuneralFlow, sinBeneficiarios, funeral.beneficiarios, beneficiario, setFuneral, setHasBeneficiary]);
 
   const lookupByCedula = useCallback(
     async (
@@ -748,7 +750,9 @@ export function EmissionStep() {
         funeralInsured: checkFuneralFlow,
       });
     }
-    if (checkFuneralFlow) {
+    if (checkFuneralFlow && sinBeneficiarios) {
+      // Viajero: el producto no indemniza a beneficiarios; no se piden ni se validan.
+    } else if (checkFuneralFlow) {
       const bens = funeral.beneficiarios ?? [];
       let pctSum = 0;
       let filled = 0;
@@ -1141,7 +1145,7 @@ export function EmissionStep() {
             })}
         </SectionCard>
 
-        {checkFuneralFlow ? (
+        {checkFuneralFlow && sinBeneficiarios ? null : checkFuneralFlow ? (
           <SectionCard
             Icon={Heart}
             title="Beneficiarios"
