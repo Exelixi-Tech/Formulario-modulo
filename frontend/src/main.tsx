@@ -14,9 +14,15 @@ import { useWizardStore } from './store/wizardStore'
 import { isFunerario, isRcv, usesFuneralStep } from './lib/product'
 import { applyMetadataFromNexusToken, getNexusTokenFromUrl } from './lib/nexus-token-client'
 import { mergeMarketplaceActorMetadata, rememberMarketplaceActorFromToken } from './lib/sso-metadata'
+import { hydrateTarjetaMetadataCanal, isTarjetaRcvFlow, markTarjetaPublicSession } from './lib/rcv-tarjeta-flow'
 
 // Identidad Exélixi (colores + favicon) solo si el flujo activo es el catálogo.
 applyExelixiBranding('Formulario');
+
+if (isTarjetaRcvFlow()) {
+  markTarjetaPublicSession();
+  hydrateTarjetaMetadataCanal();
+}
 
 rememberMarketplaceActorFromToken(getNexusTokenFromUrl());
 
@@ -68,12 +74,21 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
       });
 
       if (!handoffApplied && isRcv()) {
-        const latest = useWizardStore.getState().documents;
+        const store = useWizardStore.getState();
+        const titularFromCarnet = (store as { titularFromCarnet?: boolean }).titularFromCarnet;
+        const aseguradoId = String(store.asegurado?.identificacion ?? '').replace(/\D/g, '');
+        // Bridge/OCR ya resolvió tomador≠titular — no recalcular (pisaba tipoDoc con lógica vieja).
+        const rolesAlreadyHydrated =
+          titularFromCarnet === true
+          || (store.sameInsured === false && aseguradoId.length >= 6)
+          || (store.hasDriver && Boolean(store.conductor?.identificacion));
+
+        const latest = store.documents;
         const hasOcr =
           latest.cedula?.ocr
           || latest.licencia?.ocr
           || latest.certificado?.ocr;
-        if (hasOcr) {
+        if (hasOcr && !rolesAlreadyHydrated) {
           applyOcrPersonRolesFromDocuments(latest, {
             setSameInsured,
             setAsegurado,

@@ -9,8 +9,13 @@ import { useCatalogs, useCiudades } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
-import { getProductId, isFunerario, isRcvLaMundialFlow, usesFuneralStep } from '../../lib/product';
-import { cedulaTienePolizaVigente } from '../../lib/funeral-cedula-check';
+import { getProductId, isFunerario, isPatrimoniales, isRcvLaMundialFlow, usesFuneralStep, usesPatrimonialesStep } from '../../lib/product';
+import {
+  cedulaTienePolizaVigente,
+  polizaVigenteCramo,
+  polizaVigenteLabel,
+} from '../../lib/funeral-cedula-check';
+import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import {
   diligenciaLabel,
   isPersonaJuridica,
@@ -27,13 +32,21 @@ import {
 import { funeralOcrIdentityPatch, funeralRoleFromPrefix } from '../../lib/funeral-ocr-apply';
 import { toast } from '../../store/toastStore';
 import { User, Heart, ShieldAlert, FileText } from 'lucide-react';
-import { formatTelefono, isValidPhonePrefix, validateRequiredVePhone } from '../../lib/phone';
+import { formatTelefono, isValidPhonePrefix } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
 import {
   SECONDARY_IDENTIFICACION_MAX_LENGTH,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
+import {
+  rcvIdentityKeepFromOcr,
+  resolveRcvOcrIdentDigits,
+  resolveRcvTitularTipoDocFromCert,
+  shouldRunRcvSis2000Lookup,
+} from '../../lib/rcv-titular-identity';
 import type { FuneralPerson } from '../../types';
+import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
+import { syncTitularFromTomador } from '../../lib/funeral-sync';
 
 /** Años cumplidos desde YYYY-MM-DD (calendario, sin UTC). */
 function edadCumplida(iso?: string): number | null {
@@ -48,6 +61,39 @@ function edadCumplida(iso?: string): number | null {
   return e >= 0 ? e : null;
 }
 
+function validateFecha(iso?: string, isJuridica = false): string | undefined {
+  const raw = String(iso || '').trim();
+  if (!raw) {
+    return isJuridica
+      ? 'La fecha de constitución es obligatoria'
+      : 'La fecha de nacimiento es obligatoria';
+  }
+  const m = raw.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (!m) {
+    return 'Ingresa una fecha válida';
+  }
+  const y = Number(m[1]);
+  const mo = Number(m[2]);
+  const d = Number(m[3]);
+  if (y < 1900) {
+    return 'El año no puede ser menor a 1900';
+  }
+  const dt = new Date(y, mo - 1, d);
+  if (
+    dt.getFullYear() !== y ||
+    dt.getMonth() + 1 !== mo ||
+    dt.getDate() !== d
+  ) {
+    return 'La fecha ingresada no es válida';
+  }
+  const now = new Date();
+  const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+  if (dt > today) {
+    return 'La fecha no puede ser mayor a hoy';
+  }
+  return undefined;
+}
+
 function emptyFuneralBeneficiario(pporcen = 100): FuneralPerson {
   return {
     tipoDoc: 'V',
@@ -58,9 +104,40 @@ function emptyFuneralBeneficiario(pporcen = 100): FuneralPerson {
     sexo: '',
     parentesco: '',
     pporcen,
-    telefono: '',
-    email: '',
   };
+}
+
+/** Hay datos de beneficiario (OCR o captura). Un renglón vacío no obliga el paso. */
+function funeralBeneficiarioTieneDatos(b: FuneralPerson | undefined): boolean {
+  if (!b) return false;
+  return Boolean(
+    (b.identificacion ?? '').trim()
+    || (b.nombre ?? '').trim()
+    || (b.apellido ?? '').trim()
+    || (b.fechaNac ?? '').trim()
+    || (b.parentesco ?? '').trim()
+    || (b.sexo ?? '').trim(),
+  );
+}
+
+function parseBodyMetric(v: unknown): number | null {
+  if (v == null || v === '') return null;
+  const n = Number(String(v).replace(',', '.'));
+  return Number.isFinite(n) ? n : null;
+}
+
+function estaturaError(v: unknown): string | undefined {
+  const n = parseBodyMetric(v);
+  if (n == null) return 'La estatura es obligatoria';
+  if (n < 0.5 || n > 2.5) return 'Indica la estatura en metros (ej. 1.70)';
+  return undefined;
+}
+
+function pesoError(v: unknown): string | undefined {
+  const n = parseBodyMetric(v);
+  if (n == null) return 'El peso es obligatorio';
+  if (n < 2 || n > 400) return 'Indica el peso en kilogramos';
+  return undefined;
 }
 
 export function SectionCard({
@@ -118,7 +195,7 @@ interface ValidationErrors {
 
 const CLIENT_FIELD_ORDER = [
   'identificacion', 'nombre', 'apellido', 'telefono', 'email',
-  'fechaNac', 'sexo', 'estadoCivil', 'estado', 'ciudad', 'direccion',
+  'fechaNac', 'sexo', 'estatura', 'peso', 'estadoCivil', 'estado', 'ciudad', 'direccion',
 ];
 const CLIENT_PREFIXES = ['tom_', 'aseg_', 'benef_'];
 
@@ -163,10 +240,12 @@ export function EmissionStep() {
     beneficiario, setBeneficiario,
     funeral, setFuneral,
     diligencia, setDiligencia,
+    metadataCanal,
   } = useWizardStore();
 
   const catalogs = useCatalogs();
   const exelixiFlow = isExelixiCatalogFlow();
+  const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = isRcvLaMundialFlow() && !isCotizadorFlow();
   const producto = getProductId();
   const { config: formConfig } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -175,6 +254,14 @@ export function EmissionStep() {
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
   const ciudadesState = useCiudades(tomador.cestado);
   const aseguradoCiudades = useCiudades(asegurado.cestado);
+  /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
+  const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
+  /** Viajero: sin cobertura para indemnizar a un beneficiario, no se piden beneficiarios. */
+  const sinBeneficiarios = skipPolizaVigente;
+  /** Ramo donde se busca la póliza vigente: el del producto que manda el SSO. */
+  const polizaCramo = polizaVigenteCramo(metadataCanal);
+  /** Solo consulta adpoliza (titular/asegurado). No afecta campos del formulario funerario. */
+  const checkPolizaVigente = (isFunerario() || usesFuneralStep()) && !skipPolizaVigente;
 
   useEffect(() => {
     if (!isRcvEmision) return;
@@ -192,9 +279,59 @@ export function EmissionStep() {
   const lastFuneralCedula = useRef<Record<string, string>>({});
   const lastFuneralOk = useRef<Record<string, boolean>>({});
   const ocrForced = useRef<Record<string, string>>({});
+  /** true cuando el usuario editó la cédula a mano (no solo blur del OCR). */
+  const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
+  const checkPatrimonialesFlow = isPatrimoniales() || usesPatrimonialesStep();
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
+  const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
+
+  useEffect(() => {
+    if (!isRcvEmision || sameInsured !== false || !certOcr) return;
+    const expected = resolveRcvTitularTipoDocFromCert(certOcr);
+    if (asegurado.tipoDoc !== expected) {
+      setAsegurado({ tipoDoc: expected });
+    }
+  }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
+
+  useEffect(() => {
+    if (!checkFuneralFlow || sameInsured === false) return;
+    setAsegurado({
+      tipoDoc: tomador.tipoDoc,
+      identificacion: tomador.identificacion,
+      nombre: tomador.nombre,
+      apellido: tomador.apellido,
+      telefono: tomador.telefono,
+      email: tomador.email,
+      fechaNac: tomador.fechaNac,
+      sexo: tomador.sexo,
+      estadoCivil: tomador.estadoCivil,
+      estado: tomador.estado,
+      cestado: tomador.cestado,
+      ciudad: tomador.ciudad,
+      cciudad: tomador.cciudad,
+      direccion: tomador.direccion,
+    });
+  }, [
+    checkFuneralFlow,
+    sameInsured,
+    tomador.tipoDoc,
+    tomador.identificacion,
+    tomador.nombre,
+    tomador.apellido,
+    tomador.telefono,
+    tomador.email,
+    tomador.fechaNac,
+    tomador.sexo,
+    tomador.estadoCivil,
+    tomador.estado,
+    tomador.cestado,
+    tomador.ciudad,
+    tomador.cciudad,
+    tomador.direccion,
+    setAsegurado,
+  ]);
 
   useEffect(() => {
     if (!checkFuneralFlow) return;
@@ -232,25 +369,25 @@ export function EmissionStep() {
   };
 
   useEffect(() => {
-    if (!checkFuneralFlow) return;
+    if (!checkFuneralFlow || sinBeneficiarios) return;
     if ((funeral.beneficiarios ?? []).length > 0) return;
-    const fromOcr = beneficiario.identificacion || beneficiario.nombre
-      ? {
-          tipoDoc: beneficiario.tipoDoc || 'V',
-          identificacion: beneficiario.identificacion,
-          nombre: beneficiario.nombre,
-          apellido: beneficiario.apellido,
-          fechaNac: beneficiario.fechaNac ?? '',
-          sexo: beneficiario.sexo ?? '',
-          parentesco: beneficiario.parentesco ?? '',
-          pporcen: beneficiario.pporcen ?? 100,
-          telefono: beneficiario.telefono ?? '',
-          email: beneficiario.email ?? '',
-        }
-      : emptyFuneralBeneficiario(100);
-    setFuneral({ beneficiarios: [fromOcr] });
+    if (!(beneficiario.identificacion || beneficiario.nombre)) return;
+    setFuneral({
+      beneficiarios: [{
+        tipoDoc: beneficiario.tipoDoc || 'V',
+        identificacion: beneficiario.identificacion,
+        nombre: beneficiario.nombre,
+        apellido: beneficiario.apellido,
+        fechaNac: beneficiario.fechaNac ?? '',
+        sexo: beneficiario.sexo ?? '',
+        parentesco: beneficiario.parentesco ?? '',
+        pporcen: beneficiario.pporcen ?? 100,
+        telefono: beneficiario.telefono ?? '',
+        email: beneficiario.email ?? '',
+      }],
+    });
     setHasBeneficiary(true);
-  }, [checkFuneralFlow, funeral.beneficiarios, beneficiario, setFuneral, setHasBeneficiary]);
+  }, [checkFuneralFlow, sinBeneficiarios, funeral.beneficiarios, beneficiario, setFuneral, setHasBeneficiary]);
 
   const lookupByCedula = useCallback(
     async (
@@ -260,6 +397,9 @@ export function EmissionStep() {
       _current: PersonFormPatch,
       setPerson: (patch: PersonFormPatch) => void,
     ) => {
+      // Funerario / personas: no consultar propietary RCV (placa/dueño).
+      if (isFunerario() || usesFuneralStep()) return;
+
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 1) return;
 
@@ -310,9 +450,15 @@ export function EmissionStep() {
               : store.beneficiario;
         const role = funeralRoleFromPrefix(prefix);
         const ocrIdentity = role ? funeralOcrIdentityPatch(role) : {};
+        const documents = useWizardStore.getState().documents;
+        // RCV: carnet/cédula OCR mandan en tipoDoc — Sis2000 ipersona no debe pisar (ej. E en maclient).
+        const rcvIdentityKeep =
+          isRcvEmision && (prefix === 'aseg_' || prefix === 'tom_')
+            ? rcvIdentityKeepFromOcr(prefix, latest, digits, documents)
+            : {};
         // OCR manda en identidad; Sis2000 solo rellena huecos (teléfono, dirección…).
         const fill = sis2000EmptyFill({ ...latest, ...ocrIdentity }, patch);
-        setPerson({ ...fill, ...ocrIdentity });
+        setPerson({ ...fill, ...ocrIdentity, ...rcvIdentityKeep });
 
         const ocrFecha = String(ocrIdentity.fechaNac ?? '').slice(0, 10);
         const sisFecha = String(patch.fechaNac ?? '').slice(0, 10);
@@ -349,7 +495,7 @@ export function EmissionStep() {
       lastFuneralCedula.current[prefix] = digits;
       setLookupLoading((s) => ({ ...s, [prefix]: true }));
       try {
-        const res = await cedulaTienePolizaVigente(digits);
+        const res = await cedulaTienePolizaVigente(digits, polizaCramo);
         if (res.blocked) {
           lastFuneralOk.current[prefix] = false;
           setErrors((prev) => ({
@@ -359,8 +505,8 @@ export function EmissionStep() {
           toast.warning(
             'No se puede asegurar',
             res.cnpoliza
-              ? `Ya existe una póliza funeraria vigente (${res.cnpoliza}).`
-              : 'Esta cédula ya tiene una póliza funeraria activa. No se puede continuar.',
+              ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
+              : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
             8000,
           );
           return false;
@@ -374,7 +520,7 @@ export function EmissionStep() {
         });
         toast.success(
           'Se puede asegurar',
-          'No hay póliza funeraria vigente para esta cédula.',
+          `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
           2800,
         );
         return true;
@@ -391,63 +537,102 @@ export function EmissionStep() {
         setLookupLoading((s) => ({ ...s, [prefix]: false }));
       }
     },
-    [],
+    [polizaCramo],
   );
 
   const runFuneralCedulaAuto = useCallback(
     async (
       prefix: string,
-      tipoDoc: string,
+      _tipoDoc: string,
       identificacion: string,
-      current: PersonFormPatch,
-      setPerson: (patch: PersonFormPatch) => void,
+      _current: PersonFormPatch,
+      _setPerson: (patch: PersonFormPatch) => void,
     ): Promise<boolean> => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 6) return true;
       const ok = await checkFuneralCedula(prefix, identificacion);
       if (!ok) return false;
-      await lookupByCedula(prefix, tipoDoc || 'V', identificacion, current, setPerson);
+      // Funerario: no consultar /emissions/propietary (lookup de dueño de vehículo / RCV).
       return true;
     },
-    [checkFuneralCedula, lookupByCedula],
+    [checkFuneralCedula],
   );
 
+  // Tomador = pagador: solo se valida póliza vigente si también es el titular (sameInsured).
+  // Viajero: checkPolizaVigente=false. Si solo paga, no se bloquea.
   useEffect(() => {
-    if (!checkFuneralFlow) return;
+    if (!checkPolizaVigente || sameInsured === false) {
+      lastFuneralCedula.current['tom_'] = '';
+      lastFuneralOk.current['tom_'] = true;
+      setErrors((prev) => {
+        if (!prev.tom_identificacion) return prev;
+        const { tom_identificacion: _r, ...rest } = prev;
+        return rest;
+      });
+      return;
+    }
     const digits = String(tomador.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'tom_',
-        tomador.tipoDoc ?? 'V',
-        tomador.identificacion,
-        tomador,
-        setTomador,
-      );
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [checkFuneralFlow, tomador.identificacion, tomador.tipoDoc, runFuneralCedulaAuto, setTomador]);
-
-  useEffect(() => {
-    if (!checkFuneralFlow || sameInsured) return;
-    const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
-    if (digits.length < 6) return;
-    const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'aseg_',
-        asegurado.tipoDoc ?? 'V',
-        asegurado.identificacion,
-        asegurado,
-        setAsegurado,
-      );
+      if (checkFuneralFlow) {
+        void runFuneralCedulaAuto(
+          'tom_',
+          tomador.tipoDoc ?? 'V',
+          tomador.identificacion,
+          tomador,
+          setTomador,
+        );
+      } else {
+        void lookupByCedula(
+          'tom_',
+          tomador.tipoDoc ?? 'V',
+          tomador.identificacion,
+          tomador,
+          setTomador,
+        );
+      }
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
-    checkFuneralFlow,
+    checkPolizaVigente,
+    sameInsured,
+    tomador.identificacion,
+    tomador.tipoDoc,
+    runFuneralCedulaAuto,
+    setTomador,
+  ]);
+
+  useEffect(() => {
+    if (!checkPolizaVigente || sameInsured) return;
+    const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
+    if (digits.length < 6) return;
+    const timer = window.setTimeout(() => {
+      if (checkFuneralFlow) {
+        void runFuneralCedulaAuto(
+          'aseg_',
+          asegurado.tipoDoc ?? 'V',
+          asegurado.identificacion,
+          asegurado,
+          setAsegurado,
+        );
+      } else {
+        void lookupByCedula(
+          'aseg_',
+          asegurado.tipoDoc ?? 'V',
+          asegurado.identificacion,
+          asegurado,
+          setAsegurado,
+        );
+      }
+    }, 450);
+    return () => window.clearTimeout(timer);
+  }, [
+    checkPolizaVigente,
     sameInsured,
     asegurado.identificacion,
     asegurado.tipoDoc,
     runFuneralCedulaAuto,
+    lookupByCedula,
     setAsegurado,
   ]);
 
@@ -457,7 +642,13 @@ export function EmissionStep() {
     const len  = (v?: string) => (v ?? '').trim().length;
     const digs = (v?: string) => (v ?? '').replace(/\D/g, '').length;
 
-    const validatePerson = (person: any, prefix: string, opts?: { secondaryIdent?: boolean }) => {
+    const validatePerson = (
+      person: any,
+      prefix: string,
+      opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
+    ) => {
+      const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+
       if (opts?.secondaryIdent) {
         const idErr = validateSecondaryPersonIdentificacion(person.identificacion);
         if (idErr) e[`${prefix}identificacion`] = idErr;
@@ -485,8 +676,10 @@ export function EmissionStep() {
         e[`${prefix}apellido`] = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
       }
 
-      if (req(person.sexo))       e[`${prefix}sexo`]        = 'Selecciona el sexo';
-      if (req(person.estadoCivil)) e[`${prefix}estadoCivil`] = 'Selecciona el estado civil';
+      if (!isJuridica) {
+        if (req(person.sexo))       e[`${prefix}sexo`]        = 'Selecciona el sexo';
+        if (req(person.estadoCivil)) e[`${prefix}estadoCivil`] = 'Selecciona el estado civil';
+      }
 
       if (req(person.telefono)) {
         e[`${prefix}telefono`] = 'El teléfono es obligatorio';
@@ -504,7 +697,11 @@ export function EmissionStep() {
         e[`${prefix}email`] = `El correo no puede superar ${PERSON_FIELD_LIMITS.email} caracteres`;
       }
 
-      if (req(person.fechaNac)) e[`${prefix}fechaNac`] = 'La fecha de nacimiento es obligatoria';
+      // Validación estricta de fecha solo en patrimoniales; el resto conserva la regla original.
+      const fnacErr = isPatrimoniales()
+        ? validateFecha(person.fechaNac, isJuridica)
+        : (req(person.fechaNac) ? 'La fecha de nacimiento es obligatoria' : undefined);
+      if (fnacErr) e[`${prefix}fechaNac`] = fnacErr;
 
       // SearchSelect usa cestado/cciudad; el texto estado/ciudad puede venir vacío del autofill
       const hasEstado =
@@ -528,6 +725,13 @@ export function EmissionStep() {
       } else if (len(person.direccion) > PERSON_FIELD_LIMITS.direccion) {
         e[`${prefix}direccion`] = `La dirección no puede superar ${PERSON_FIELD_LIMITS.direccion} caracteres`;
       }
+
+      if (opts?.funeralInsured) {
+        const he = estaturaError(person.estatura);
+        if (he) e[`${prefix}estatura`] = he;
+        const pe = pesoError(person.peso);
+        if (pe) e[`${prefix}peso`] = pe;
+      }
     };
 
     validatePerson(tomador, 'tom_', {
@@ -540,22 +744,31 @@ export function EmissionStep() {
         e.tom_profesion = 'Indique profesión o actividad económica';
       }
     }
-    if (!sameInsured) validatePerson(asegurado, 'aseg_', { secondaryIdent: true });
-    if (checkFuneralFlow) {
+    if (!sameInsured || checkFuneralFlow) {
+      validatePerson(asegurado, 'aseg_', {
+        secondaryIdent: true,
+        funeralInsured: checkFuneralFlow,
+      });
+    }
+    if (checkFuneralFlow && sinBeneficiarios) {
+      // Viajero: el producto no indemniza a beneficiarios; no se piden ni se validan.
+    } else if (checkFuneralFlow) {
       const bens = funeral.beneficiarios ?? [];
-      if (bens.length === 0) {
-        e.funeral_benef = 'Agrega al menos un beneficiario';
-      }
       let pctSum = 0;
+      let filled = 0;
       bens.forEach((b, i) => {
+        if (!funeralBeneficiarioTieneDatos(b)) return;
+        filled += 1;
         const idErr = validateSecondaryPersonIdentificacion(b.identificacion);
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
         if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
-        if (!(b.fechaNac ?? '').trim()) e[`fben_${i}_fnac`] = 'La fecha de nacimiento es obligatoria';
+        const fnacErr = isPatrimoniales()
+          ? validateFecha(b.fechaNac)
+          : (!(b.fechaNac ?? '').trim() ? 'La fecha de nacimiento es obligatoria' : undefined);
+        if (fnacErr) e[`fben_${i}_fnac`] = fnacErr;
         if (!(b.parentesco ?? '').trim()) e[`fben_${i}_parentesco`] = 'El parentesco es obligatorio';
-        const phoneErr = validateRequiredVePhone(b.telefono);
-        if (phoneErr) e[`fben_${i}_tel`] = phoneErr;
+        if (!(b.sexo ?? '').trim()) e[`fben_${i}_sexo`] = 'Selecciona el sexo';
         const pct = Number(b.pporcen);
         if (!Number.isFinite(pct) || pct < 1 || pct > 100) {
           e[`fben_${i}_pct`] = 'El % de beneficio debe estar entre 1 y 100';
@@ -563,10 +776,10 @@ export function EmissionStep() {
           pctSum += pct;
         }
       });
-      if (bens.length > 0 && pctSum !== 100) {
+      if (filled > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
-    } else if (hasBeneficiary) {
+    } else if (hasBeneficiary && !tarjetaFlow && !checkPatrimonialesFlow) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
 
@@ -577,7 +790,11 @@ export function EmissionStep() {
     }
 
     if (checkFuneralFlow) {
-      const first = (funeral.beneficiarios ?? [])[0];
+      const filledBens = (funeral.beneficiarios ?? []).filter(funeralBeneficiarioTieneDatos);
+      if (filledBens.length !== (funeral.beneficiarios ?? []).length) {
+        setFuneral({ beneficiarios: filledBens });
+      }
+      const first = filledBens[0];
       if (first) {
         setHasBeneficiary(true);
         setBeneficiario({
@@ -592,17 +809,23 @@ export function EmissionStep() {
           telefono: first.telefono,
           email: first.email,
         });
+      } else {
+        setHasBeneficiary(false);
       }
     }
 
-    if (checkFuneralFlow) {
-      const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
-      if (!tomOk) return false;
-      if (!sameInsured) {
+    if (checkPolizaVigente) {
+      // Solo titulares/asegurados: el tomador-pagador no se bloquea por póliza vigente.
+      // Viajero: checkPolizaVigente=false.
+      if (sameInsured !== false) {
+        const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
+        if (!tomOk) return false;
+      } else {
         const asegOk = await checkFuneralCedula('aseg_', asegurado.identificacion);
         if (!asegOk) return false;
       }
     }
+    if (checkFuneralFlow) syncTitularFromTomador();
     return true;
   };
 
@@ -613,20 +836,35 @@ export function EmissionStep() {
     setPerson: any,
     prefix: string,
     ciuState: any,
-    opts?: { secondaryIdent?: boolean },
-  ) => (
+    opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
+  ) => {
+    const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+
+    return (
     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
       <Field
         anchor={`cli-${prefix}identificacion`}
-        label="Cédula o documento *"
+        label={opts?.funeralInsured ? 'Tipo Doc. Identidad *' : 'Cédula o documento *'}
         error={errors[`${prefix}identificacion`]}
         hint={
           isRcvEmision
-            ? 'Al salir del campo se buscan los datos en Sis2000'
+            ? (() => {
+                const ocrId = resolveRcvOcrIdentDigits(
+                  prefix,
+                  useWizardStore.getState().documents,
+                );
+                const cur = String(person.identificacion ?? '').replace(/\D/g, '');
+                if (ocrId && cur === ocrId && !manualIdentEdit.current[prefix]) {
+                  return 'Datos del OCR. Edite la cédula para buscar en Sis2000';
+                }
+                return 'Al salir del campo se buscan los datos en Sis2000';
+              })()
             : checkFuneralFlow
               ? lookupLoading[prefix]
                 ? 'Consultando Sis2000…'
-                : 'Al completar la cédula se consulta si se puede asegurar y se cargan los datos'
+                : prefix === 'tom_' && sameInsured === false
+                  ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
+                  : 'Al completar la cédula se consulta si se puede asegurar'
               : undefined
         }
       >
@@ -646,14 +884,26 @@ export function EmissionStep() {
           onIdentificacionChange={(v) => {
             lastLookupCid.current[prefix] = '';
             lastFuneralCedula.current[prefix] = '';
+            manualIdentEdit.current[prefix] = true;
             setPerson({ identificacion: clipPersonField('identificacion', v) });
           }}
           onIdentificacionBlur={
             isRcvEmision
               ? (id) => {
+                  const docs = useWizardStore.getState().documents;
+                  const ocrIdent = resolveRcvOcrIdentDigits(prefix, docs);
+                  if (
+                    !shouldRunRcvSis2000Lookup(
+                      id,
+                      ocrIdent,
+                      Boolean(manualIdentEdit.current[prefix]),
+                    )
+                  ) {
+                    return;
+                  }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-              : checkFuneralFlow
+              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
                 ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
@@ -710,15 +960,19 @@ export function EmissionStep() {
       />
       <Field
         anchor={`cli-${prefix}fechaNac`}
-        label="Fecha de Nac. *"
+        label={isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
         error={errors[`${prefix}fechaNac`]}
-        hint={(() => {
-          const edad = edadCumplida(person.fechaNac);
-          if (edad == null) return undefined;
-          return edad > 80
-            ? `${edad} años cumplidos · el plan funerario admite hasta 80`
-            : `${edad} años cumplidos`;
-        })()}
+        hint={
+          isJuridica
+            ? undefined
+            : (() => {
+                const edad = edadCumplida(person.fechaNac);
+                if (edad == null) return undefined;
+                return edad > 80
+                  ? `${edad} años cumplidos · el plan funerario admite hasta 80`
+                  : `${edad} años cumplidos`;
+              })()
+        }
       >
         <Input
           value={person.fechaNac ?? ''}
@@ -727,40 +981,74 @@ export function EmissionStep() {
           max={new Date().toISOString().split('T')[0]}
         />
       </Field>
-      <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
-        <SearchSelect
-          value={person.sexo}
-          options={
-            catalogs.sexos.length > 0
-              ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
-              : [
-                  { value: 'Femenino',  label: 'Femenino'  },
-                  { value: 'Masculino', label: 'Masculino' },
-                ]
-          }
-          onChange={(value) => setPerson({ sexo: value })}
-          placeholder="— Seleccionar —"
-          loading={catalogs.loading}
-        />
-      </Field>
-      <Field anchor={`cli-${prefix}estadoCivil`} label="Estado Civil *" error={errors[`${prefix}estadoCivil`]}>
-        <SearchSelect
-          value={person.estadoCivil}
-          options={
-            catalogs.estadosCivil.length > 0
-              ? catalogs.estadosCivil.map((s) => ({ value: String(s.label), label: s.label }))
-              : [
-                  { value: 'Soltero(a)',     label: 'Soltero(a)'     },
-                  { value: 'Casado(a)',      label: 'Casado(a)'      },
-                  { value: 'Divorciado(a)',  label: 'Divorciado(a)'  },
-                  { value: 'Viudo(a)',       label: 'Viudo(a)'       },
-                ]
-          }
-          onChange={(value) => setPerson({ estadoCivil: value })}
-          placeholder="— Seleccionar —"
-          loading={catalogs.loading}
-        />
-      </Field>
+      {!isJuridica && (
+        <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
+          <SearchSelect
+            value={person.sexo}
+            options={
+              catalogs.sexos.length > 0
+                ? catalogs.sexos.map((s) => ({ value: String(s.label), label: s.label }))
+                : [
+                    { value: 'Femenino',  label: 'Femenino'  },
+                    { value: 'Masculino', label: 'Masculino' },
+                  ]
+            }
+            onChange={(value) => setPerson({ sexo: value })}
+            placeholder="— Seleccionar —"
+            loading={catalogs.loading}
+          />
+        </Field>
+      )}
+      {opts?.funeralInsured && (
+        <>
+          <Field
+            anchor={`cli-${prefix}estatura`}
+            label="Estatura *"
+            error={errors[`${prefix}estatura`]}
+            hint="Altura (mts.)"
+          >
+            <Input
+              value={person.estatura ?? ''}
+              onChange={(e) => setPerson({ estatura: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder="1.70"
+              inputMode="decimal"
+            />
+          </Field>
+          <Field
+            anchor={`cli-${prefix}peso`}
+            label="Peso *"
+            error={errors[`${prefix}peso`]}
+            hint="Peso (kg.)"
+          >
+            <Input
+              value={person.peso ?? ''}
+              onChange={(e) => setPerson({ peso: e.target.value.replace(/[^0-9.,]/g, '') })}
+              placeholder="70"
+              inputMode="decimal"
+            />
+          </Field>
+        </>
+      )}
+      {!isJuridica && (
+        <Field anchor={`cli-${prefix}estadoCivil`} label="Estado Civil *" error={errors[`${prefix}estadoCivil`]}>
+          <SearchSelect
+            value={person.estadoCivil}
+            options={
+              catalogs.estadosCivil.length > 0
+                ? catalogs.estadosCivil.map((s) => ({ value: String(s.label), label: s.label }))
+                : [
+                    { value: 'Soltero(a)',     label: 'Soltero(a)'     },
+                    { value: 'Casado(a)',      label: 'Casado(a)'      },
+                    { value: 'Divorciado(a)',  label: 'Divorciado(a)'  },
+                    { value: 'Viudo(a)',       label: 'Viudo(a)'       },
+                  ]
+            }
+            onChange={(value) => setPerson({ estadoCivil: value })}
+            placeholder="— Seleccionar —"
+            loading={catalogs.loading}
+          />
+        </Field>
+      )}
       <div className="hidden sm:block"></div>
       <Field anchor={`cli-${prefix}direccion`} label="Dirección *" error={errors[`${prefix}direccion`]} full>
         <Textarea
@@ -801,6 +1089,7 @@ export function EmissionStep() {
       )}
     </div>
   );
+  };
 
   return (
     <div className="animate-fade-in">
@@ -849,14 +1138,18 @@ export function EmissionStep() {
             onChange={(v) => setSameInsured(!v)}
             label="¿La persona que pagará la Póliza es diferente a la que será asegurada?"
           />
-          {!sameInsured && renderPersonForm(asegurado, setAsegurado, 'aseg_', aseguradoCiudades, { secondaryIdent: true })}
+          {(checkFuneralFlow || !sameInsured) &&
+            renderPersonForm(asegurado, setAsegurado, 'aseg_', aseguradoCiudades, {
+              secondaryIdent: true,
+              funeralInsured: checkFuneralFlow,
+            })}
         </SectionCard>
 
-        {checkFuneralFlow ? (
+        {checkFuneralFlow && sinBeneficiarios ? null : checkFuneralFlow ? (
           <SectionCard
             Icon={Heart}
             title="Beneficiarios"
-            description="El porcentaje de todos debe sumar 100% (como en Sis2000 pporce)."
+            description="Opcional. Si no cargó la cédula del beneficiario, puede continuar. Si agrega uno, el porcentaje debe sumar 100%."
             statusLabel={errors.funeral_benef_pct || errors.funeral_benef}
             statusTone={errors.funeral_benef_pct || errors.funeral_benef ? 'warning' : 'neutral'}
           >
@@ -867,22 +1160,49 @@ export function EmissionStep() {
                     <span className="text-[0.7rem] font-black uppercase tracking-wider text-fuchsia-600">
                       Beneficiario {idx + 1}
                     </span>
-                    {idx > 0 && (
-                      <button
-                        type="button"
-                        className="text-[0.7rem] font-bold text-rose-500"
-                        onClick={() =>
-                          setFuneral({
-                            beneficiarios: funeral.beneficiarios.filter((_, i) => i !== idx),
-                          })
-                        }
-                      >
-                        Quitar
-                      </button>
-                    )}
+                    <button
+                      type="button"
+                      className="text-[0.7rem] font-bold text-rose-500"
+                      onClick={() =>
+                        setFuneral({
+                          beneficiarios: (funeral.beneficiarios ?? []).filter((_, i) => i !== idx),
+                        })
+                      }
+                    >
+                      Quitar
+                    </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field anchor={`cli-fben_${idx}_id`} label="Cédula *" error={errors[`fben_${idx}_id`]}>
+                    <Field anchor={`cli-fben_${idx}_parentesco`} label="Parentesco *" error={errors[`fben_${idx}_parentesco`]}>
+                      <SearchSelect
+                        value={ben.parentesco}
+                        options={parentescoOptions}
+                        onChange={(value) => patchFuneralBeneficiario(idx, { parentesco: value })}
+                        placeholder="— Seleccionar —"
+                        loading={catalogs.loading}
+                      />
+                    </Field>
+                    <Field
+                      anchor={`cli-fben_${idx}_pct`}
+                      label="Porcentaje de Beneficio *"
+                      error={errors[`fben_${idx}_pct`]}
+                      hint="El porcentaje total de beneficio debe ser el 100%"
+                    >
+                      <Input
+                        type="number"
+                        min={1}
+                        max={100}
+                        value={ben.pporcen ?? ''}
+                        onChange={(ev) =>
+                          patchFuneralBeneficiario(idx, { pporcen: Number(ev.target.value) })
+                        }
+                      />
+                    </Field>
+                    <Field
+                      anchor={`cli-fben_${idx}_id`}
+                      label="Tipo Doc. Identidad *"
+                      error={errors[`fben_${idx}_id`]}
+                    >
                       <IdentityInput
                         tipoDoc={ben.tipoDoc || 'V'}
                         identificacion={ben.identificacion}
@@ -892,22 +1212,6 @@ export function EmissionStep() {
                           patchFuneralBeneficiario(idx, {
                             identificacion: v.slice(0, SECONDARY_IDENTIFICACION_MAX_LENGTH),
                           })
-                        }
-                      />
-                    </Field>
-                    <Field
-                      anchor={`cli-fben_${idx}_pct`}
-                      label="% Beneficio *"
-                      error={errors[`fben_${idx}_pct`]}
-                      hint="La suma de todos debe ser 100"
-                    >
-                      <Input
-                        type="number"
-                        min={1}
-                        max={100}
-                        value={ben.pporcen ?? ''}
-                        onChange={(ev) =>
-                          patchFuneralBeneficiario(idx, { pporcen: Number(ev.target.value) })
                         }
                       />
                     </Field>
@@ -931,33 +1235,7 @@ export function EmissionStep() {
                         }
                       />
                     </Field>
-                    <Field anchor={`cli-fben_${idx}_fnac`} label="Fecha de Nac. *" error={errors[`fben_${idx}_fnac`]}>
-                      <Input
-                        type="date"
-                        value={ben.fechaNac ?? ''}
-                        onChange={(ev) => patchFuneralBeneficiario(idx, { fechaNac: ev.target.value })}
-                      />
-                    </Field>
-                    <Field anchor={`cli-fben_${idx}_parentesco`} label="Parentesco *" error={errors[`fben_${idx}_parentesco`]}>
-                      <SearchSelect
-                        value={ben.parentesco}
-                        options={parentescoOptions}
-                        onChange={(value) => patchFuneralBeneficiario(idx, { parentesco: value })}
-                        placeholder="— Seleccionar —"
-                        loading={catalogs.loading}
-                      />
-                    </Field>
-                    <Field anchor={`cli-fben_${idx}_tel`} label="Teléfono *" error={errors[`fben_${idx}_tel`]}>
-                      <Input
-                        value={formatTelefono(ben.telefono ?? '')}
-                        onChange={(ev) =>
-                          patchFuneralBeneficiario(idx, { telefono: formatTelefono(ev.target.value) })
-                        }
-                        type="tel"
-                        maxLength={PERSON_FIELD_LIMITS.telefonoDisplay}
-                      />
-                    </Field>
-                    <Field label="Sexo">
+                    <Field anchor={`cli-fben_${idx}_sexo`} label="Sexo *" error={errors[`fben_${idx}_sexo`]}>
                       <SearchSelect
                         value={ben.sexo}
                         options={
@@ -971,6 +1249,13 @@ export function EmissionStep() {
                         onChange={(value) => patchFuneralBeneficiario(idx, { sexo: value })}
                         placeholder="— Seleccionar —"
                         loading={catalogs.loading}
+                      />
+                    </Field>
+                    <Field anchor={`cli-fben_${idx}_fnac`} label="Fecha de Nacimiento *" error={errors[`fben_${idx}_fnac`]}>
+                      <Input
+                        type="date"
+                        value={ben.fechaNac ?? ''}
+                        onChange={(ev) => patchFuneralBeneficiario(idx, { fechaNac: ev.target.value })}
                       />
                     </Field>
                   </div>
@@ -992,7 +1277,7 @@ export function EmissionStep() {
               </button>
             </div>
           </SectionCard>
-        ) : (
+        ) : !tarjetaFlow && !checkPatrimonialesFlow ? (
           <SectionCard
             Icon={Heart}
             title="Datos del Beneficiario Preferencial"
@@ -1004,7 +1289,7 @@ export function EmissionStep() {
             />
             {hasBeneficiary && renderPersonForm(beneficiario, setBeneficiario, 'benef_', beneficiarioCiudades, { secondaryIdent: true })}
           </SectionCard>
-        )}
+        ) : null}
       </div>
     </div>
   );

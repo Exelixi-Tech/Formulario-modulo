@@ -45,6 +45,7 @@ import {
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import type { VehicleData } from '../../types';
+import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 
 const COLOR_SWATCHES: Record<string, string> = {
   blanco: '#F8FAFC', negro: '#0F172A', gris: '#94A3B8', plateado: '#CBD5E1',
@@ -220,6 +221,7 @@ export function VehicleStep() {
   const exelixiFlow = isExelixiCatalogFlow();
   const cotizadorRcv = isCotizadorFlow();
   const rcvLaMundial = isRcvLaMundialFlow();
+  const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = rcvLaMundial && !cotizadorRcv;
   const conductorCiudades = useCiudades(conductor.cestado);
   const isBinacional = rcvLaMundial && vehicle.tipoPlaca === 'binacional';
@@ -724,7 +726,9 @@ export function VehicleStep() {
       if (req(vehicle.cmodelo)) e.modelo = 'Selecciona el modelo del catálogo';
       else if (req(vehicle.modelo)) e.modelo = 'El modelo es obligatorio';
       if (req(vehicle.cversion)) e.version = 'Debes seleccionar la versión exacta del vehículo';
-      else if (!vehicle.ccategoria_uso && req(vehicle.uso)) e.uso = 'Selecciona el uso del vehículo';
+      else if (!tarjetaFlow && !vehicle.ccategoria_uso && req(vehicle.uso)) {
+        e.uso = 'Selecciona el uso del vehículo';
+      }
       if (rcvLaMundial && showToneladas && (vehicle.ntoneladas == null || Number.isNaN(Number(vehicle.ntoneladas)))) {
         e.toneladas = 'Indica las toneladas totales (mín. 13 TM)';
       }
@@ -746,7 +750,9 @@ export function VehicleStep() {
     else if (req(vehicle.modelo)) e.modelo = 'El modelo es obligatorio';
 
     if (req(vehicle.cversion)) e.version = 'Debes seleccionar la versión exacta del vehículo';
-    else if (!vehicle.ccategoria_uso && req(vehicle.uso)) e.uso = 'Selecciona el uso del vehículo';
+    else if (!tarjetaFlow && !vehicle.ccategoria_uso && req(vehicle.uso)) {
+      e.uso = 'Selecciona el uso del vehículo';
+    }
 
     if (rcvLaMundial && showToneladas && (vehicle.ntoneladas == null || Number.isNaN(Number(vehicle.ntoneladas)))) {
       e.toneladas = 'Indica las toneladas totales (mín. 13 TM)';
@@ -793,9 +799,8 @@ export function VehicleStep() {
         e.cond_apellido = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
       }
 
-      if (!licencia) {
-        e.cond_licencia = 'El número de licencia es obligatorio';
-      } else if (licencia.length < 5) {
+      // Licencia del conductor habitual: opcional (área técnica); si se escribe, se valida el largo.
+      if (licencia && licencia.length < 5) {
         e.cond_licencia = 'La licencia debe tener al menos 5 caracteres';
       } else if (licencia.length > 20) {
         e.cond_licencia = 'La licencia no puede superar 20 caracteres';
@@ -1180,7 +1185,8 @@ export function VehicleStep() {
             </Field>
           )}
 
-          {/* Uso — categorías dinámicas según la versión seleccionada */}
+          {/* Uso — oculto en flujo tarjeta (plan FARMPA/FARMMO fija el tipo) */}
+          {!tarjetaFlow && (
           <Field
             anchor="veh-uso"
             error={errors.uso}
@@ -1258,8 +1264,9 @@ export function VehicleStep() {
               </Select>
             )}
           </Field>
+          )}
 
-          {rcvLaMundial && (
+          {rcvLaMundial && !tarjetaFlow && (
             <>
               <Field
                 label="Actividades asociadas (Recargo RCV) *"
@@ -1290,7 +1297,8 @@ export function VehicleStep() {
                     <option value="">— Selecciona actividad —</option>
                     {recargosRcv.map((r) => (
                       <option key={r.csustanc} value={String(r.csustanc)}>
-                        {r.xsustanc}{Number(r.porcenta) > 0 ? ` (+${r.porcenta}%)` : ''}
+                        {/* Área técnica (pruebas JD 08-10): la actividad no muestra el % de recargo. */}
+                        {r.xsustanc}
                       </option>
                     ))}
                   </Select>
@@ -1576,7 +1584,7 @@ export function VehicleStep() {
                   maxLength={PERSON_FIELD_LIMITS.direccion}
                 />
               </Field>
-              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir *" error={errors.cond_licencia} hint="Máx. 20 caracteres alfanuméricos" full>
+              <Field anchor="veh-cond_licencia" label="Número de licencia de conducir (opcional)" error={errors.cond_licencia} hint="Máx. 20 caracteres alfanuméricos" full>
                 <Input
                   value={conductor.licencia ?? ''}
                   onChange={(e) => setConductor({ licencia: e.target.value.toUpperCase().replace(/[^A-Z0-9-]/g, '').slice(0, 20) })}

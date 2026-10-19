@@ -10,6 +10,7 @@ export interface ExelixiWizardHandoff {
   beneficiario?: unknown;
   vehicle?: unknown;
   funeral?: unknown;
+  patrimoniales?: unknown;
   category?: string;
   selectedPlan?: unknown;
   cproveedor?: number | string | null;

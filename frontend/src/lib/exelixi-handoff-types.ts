@@ -54,5 +54,18 @@ export interface ExelixiOcrHandoff {
   conductor?: Partial<PersonData>;
   sameInsured?: boolean;
   asegurado?: Partial<PersonData>;
+  tarjeta?: {
+    cplan?: string | null;
+    cproducto?: string | null;
+    cproductor?: number | null;
+    ccanalalt?: number | null;
+    cramo?: string | null;
+    bfactura?: 0 | 1;
+    xcodigoUnico?: string;
+    ctarjeta?: number | null;
+    nombreProducto?: string | null;
+    raw?: Record<string, unknown>;
+  } | null;
+  metadataCanal?: Record<string, unknown> | null;
   savedAt: number;
 }
