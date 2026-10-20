@@ -556,42 +556,22 @@ export function EmissionStep() {
     [checkFuneralCedula],
   );
 
-  // Tomador = pagador: solo se valida póliza vigente si también es el titular (sameInsured).
-  // Viajero: checkPolizaVigente=false. Si solo paga, no se bloquea.
+  // Tomador = pagador: nunca se bloquea por póliza vigente (puede pagar varias pólizas).
+  // La póliza vigente se valida en el titular (aseg_), aunque sea la misma persona que el
+  // tomador: así el aviso sale en "persona que será asegurada". Viajero: checkPolizaVigente=false.
   useEffect(() => {
-    if (!checkPolizaVigente || sameInsured === false) {
-      lastFuneralCedula.current['tom_'] = '';
-      lastFuneralOk.current['tom_'] = true;
-      setErrors((prev) => {
-        if (!prev.tom_identificacion) return prev;
-        const { tom_identificacion: _r, ...rest } = prev;
-        return rest;
-      });
-      return;
-    }
-    const digits = String(tomador.identificacion || '').replace(/\D/g, '');
-    if (digits.length < 6) return;
-    const timer = window.setTimeout(() => {
-      void runFuneralCedulaAuto(
-        'tom_',
-        tomador.tipoDoc ?? 'V',
-        tomador.identificacion,
-        tomador,
-        setTomador,
-      );
-    }, 450);
-    return () => window.clearTimeout(timer);
-  }, [
-    checkPolizaVigente,
-    sameInsured,
-    tomador.identificacion,
-    tomador.tipoDoc,
-    runFuneralCedulaAuto,
-    setTomador,
-  ]);
+    lastFuneralCedula.current['tom_'] = '';
+    lastFuneralOk.current['tom_'] = true;
+    setErrors((prev) => {
+      if (!prev.tom_identificacion) return prev;
+      const { tom_identificacion: _r, ...rest } = prev;
+      return rest;
+    });
+  }, [checkPolizaVigente, sameInsured, tomador.identificacion, tomador.tipoDoc]);
 
+  // Titular: si es el mismo tomador, sus datos ya vienen sincronizados del tomador.
   useEffect(() => {
-    if (!checkPolizaVigente || sameInsured) return;
+    if (!checkPolizaVigente) return;
     const digits = String(asegurado.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
     const timer = window.setTimeout(() => {
@@ -782,15 +762,12 @@ export function EmissionStep() {
     }
 
     if (checkPolizaVigente) {
-      // Solo titulares/asegurados: el tomador-pagador no se bloquea por póliza vigente.
+      // Solo el titular/asegurado: el tomador-pagador no se bloquea por póliza vigente.
+      // Mismo titular que el tomador: se valida su cédula, con el aviso en el titular.
       // Viajero: checkPolizaVigente=false.
-      if (sameInsured !== false) {
-        const tomOk = await checkFuneralCedula('tom_', tomador.identificacion);
-        if (!tomOk) return false;
-      } else {
-        const asegOk = await checkFuneralCedula('aseg_', asegurado.identificacion);
-        if (!asegOk) return false;
-      }
+      const titularId = sameInsured !== false ? tomador.identificacion : asegurado.identificacion;
+      const asegOk = await checkFuneralCedula('aseg_', titularId);
+      if (!asegOk) return false;
     }
     if (checkFuneralFlow) syncTitularFromTomador();
     return true;
@@ -829,8 +806,10 @@ export function EmissionStep() {
               : checkFuneralFlow
                 ? lookupLoading[prefix]
                   ? 'Consultando Sis2000…'
-                  : prefix === 'tom_' && sameInsured === false
-                    ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
+                  : prefix === 'tom_'
+                    ? sameInsured === false
+                      ? 'Tomador (solo paga): no se valida póliza vigente; puede pagar varias pólizas'
+                      : 'La póliza vigente se valida en los datos del titular'
                     : 'Al completar la cédula se consulta si se puede asegurar'
                 : undefined
           }
@@ -870,7 +849,7 @@ export function EmissionStep() {
                   }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-                : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
+                : checkFuneralFlow && prefix !== 'tom_'
                   ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
