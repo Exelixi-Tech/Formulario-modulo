@@ -1138,7 +1138,7 @@ export function EmissionStep() {
                   <span className="text-sm text-slate-700 leading-relaxed">
                     He leído y aceptado los{' '}
                     <a
-                      href={`${import.meta.env.BASE_URL}docs/terminos-y-condiciones-lms.pdf`}
+                      href={`${import.meta.env.BASE_URL}legal/terminos-y-condiciones-lms.pdf`}
                       target="_blank"
                       rel="noopener noreferrer"
                       className="font-bold text-indigo-600 underline"
