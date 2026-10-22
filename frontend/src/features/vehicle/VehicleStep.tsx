@@ -41,7 +41,7 @@ import {
   MOTOR_SERIAL_MAX_LEN,
 } from '../../lib/vehicle-serial';
 import {
-  SECONDARY_IDENTIFICACION_MAX_LENGTH,
+  secondaryIdentificacionMax,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import type { VehicleData } from '../../types';
@@ -805,7 +805,7 @@ export function VehicleStep() {
       } else if (licencia.length > 20) {
         e.cond_licencia = 'La licencia no puede superar 20 caracteres';
       }
-      const condIdErr = validateSecondaryPersonIdentificacion(conductor.identificacion);
+      const condIdErr = validateSecondaryPersonIdentificacion(conductor.identificacion, conductor.tipoDoc);
       if (condIdErr) e.cond_identificacion = condIdErr;
 
       if (req(conductor.telefono)) {
@@ -1477,7 +1477,7 @@ export function VehicleStep() {
                 <IdentityInput
                   tipoDoc={conductor.tipoDoc ?? 'V'}
                   identificacion={conductor.identificacion}
-                  maxLength={SECONDARY_IDENTIFICACION_MAX_LENGTH}
+                  maxLength={secondaryIdentificacionMax(conductor.tipoDoc)}
                   loading={conductorLookupLoading}
                   onTipoDocChange={(v) => {
                     lastConductorLookupCid.current = '';
