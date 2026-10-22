@@ -753,6 +753,17 @@ export function EmissionStep() {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
 
+    // Declaración de fe + Términos y Condiciones (mismas de las emisiones La Mundial).
+    // Funerario/personas tiene su propia aceptación en el cuestionario.
+    if (!checkFuneralFlow) {
+      if (!tomador.declaraVeracidad) {
+        e.tom_declaraVeracidad = 'Debe declarar que los datos proporcionados son ciertos para continuar';
+      }
+      if (!tomador.aceptaTerminos) {
+        e.tom_aceptaTerminos = 'Debe aceptar los Términos y Condiciones para continuar';
+      }
+    }
+
     setErrors(e);
     if (Object.keys(e).length > 0) {
       focusClientError(e);
@@ -1095,6 +1106,53 @@ export function EmissionStep() {
             onChange={(v) => setTomador({ personaPoliticamenteExpuesta: v })}
             label="Soy una Persona Políticamente Expuesta (PPE)"
           />
+          {!checkFuneralFlow && (
+            <div className="mt-4 space-y-3">
+              <div id="cli-tom_declaraVeracidad">
+                <label className="flex gap-3 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(tomador.declaraVeracidad)}
+                    onChange={(ev) => setTomador({ declaraVeracidad: ev.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+                  />
+                  <span className="text-sm text-slate-700 leading-relaxed">
+                    Declaro que todos los datos proporcionados son ciertos, completos, libres de falsificación,
+                    reticencia y omisión, y autorizo a cualquier institución u organismo público o privado para que
+                    antes o después de un evento cubierto por la póliza suministre cualquier dato de interés para el
+                    asegurador.
+                  </span>
+                </label>
+                {errors.tom_declaraVeracidad && (
+                  <p className="mt-1 ml-7 text-xs font-semibold text-rose-600">{errors.tom_declaraVeracidad}</p>
+                )}
+              </div>
+              <div id="cli-tom_aceptaTerminos">
+                <label className="flex gap-3 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(tomador.aceptaTerminos)}
+                    onChange={(ev) => setTomador({ aceptaTerminos: ev.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+                  />
+                  <span className="text-sm text-slate-700 leading-relaxed">
+                    He leído y aceptado los{' '}
+                    <a
+                      href={`${import.meta.env.BASE_URL}docs/terminos-y-condiciones-lms.pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold text-indigo-600 underline"
+                    >
+                      Términos y Condiciones
+                    </a>
+                  </span>
+                </label>
+                {errors.tom_aceptaTerminos && (
+                  <p className="mt-1 ml-7 text-xs font-semibold text-rose-600">{errors.tom_aceptaTerminos}</p>
+                )}
+              </div>
+            </div>
+          )}
         </SectionCard>
 
         {/* Asegurado (Titular) */}

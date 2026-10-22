@@ -81,6 +81,10 @@ export type TomadorData = {
   direccion: string;
   /** Declara ser Persona Políticamente Expuesta (requerido por La Mundial). */
   personaPoliticamenteExpuesta: boolean;
+  /** Declaración de fe: datos ciertos, completos y autorización de consulta (emisiones La Mundial). */
+  declaraVeracidad?: boolean;
+  /** Acepta los Términos y Condiciones de contratación electrónica La Mundial. */
+  aceptaTerminos?: boolean;
   /** Código numérico La Mundial del estado (cestado). Se obtiene del selector de catálogo. */
   cestado?: number;
   /** Código numérico La Mundial de la ciudad (cciudad). Se obtiene del selector de catálogo. */
