@@ -35,7 +35,7 @@ import { User, Heart, ShieldAlert, FileText } from 'lucide-react';
 import { formatTelefono, isValidPhonePrefix } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
 import {
-  SECONDARY_IDENTIFICACION_MAX_LENGTH,
+  secondaryIdentificacionMax,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import {
@@ -607,7 +607,7 @@ export function EmissionStep() {
       const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
 
       if (opts?.secondaryIdent) {
-        const idErr = validateSecondaryPersonIdentificacion(person.identificacion);
+        const idErr = validateSecondaryPersonIdentificacion(person.identificacion, person.tipoDoc);
         if (idErr) e[`${prefix}identificacion`] = idErr;
       } else if (req(person.identificacion)) {
         e[`${prefix}identificacion`] = 'La identificación es obligatoria';
@@ -708,7 +708,7 @@ export function EmissionStep() {
       const bens = (funeral.beneficiarios ?? []).filter(funeralBeneficiarioTieneDatos);
       let pctSum = 0;
       bens.forEach((b, i) => {
-        const idErr = validateSecondaryPersonIdentificacion(b.identificacion);
+        const idErr = validateSecondaryPersonIdentificacion(b.identificacion, b.tipoDoc);
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
         if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
@@ -819,7 +819,7 @@ export function EmissionStep() {
             identificacion={person.identificacion ?? ''}
             maxLength={
               opts?.secondaryIdent
-                ? SECONDARY_IDENTIFICACION_MAX_LENGTH
+                ? secondaryIdentificacionMax(person.tipoDoc)
                 : PERSON_FIELD_LIMITS.identificacion
             }
             loading={Boolean(lookupLoading[prefix])}
@@ -1154,11 +1154,11 @@ export function EmissionStep() {
                       <IdentityInput
                         tipoDoc={ben.tipoDoc || 'V'}
                         identificacion={ben.identificacion}
-                        maxLength={SECONDARY_IDENTIFICACION_MAX_LENGTH}
+                        maxLength={secondaryIdentificacionMax(ben.tipoDoc)}
                         onTipoDocChange={(v) => patchFuneralBeneficiario(idx, { tipoDoc: v })}
                         onIdentificacionChange={(v) =>
                           patchFuneralBeneficiario(idx, {
-                            identificacion: v.slice(0, SECONDARY_IDENTIFICACION_MAX_LENGTH),
+                            identificacion: v.slice(0, secondaryIdentificacionMax(ben.tipoDoc)),
                           })
                         }
                       />

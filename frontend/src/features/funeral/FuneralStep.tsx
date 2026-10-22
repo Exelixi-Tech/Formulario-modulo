@@ -23,7 +23,7 @@ import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import { formatTelefono, validateRequiredVePhone } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
 import {
-  SECONDARY_IDENTIFICACION_MAX_LENGTH,
+  secondaryIdentificacionMax,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import { toast } from '../../store/toastStore';
@@ -97,11 +97,11 @@ function PersonFields({
         <IdentityInput
           tipoDoc={person.tipoDoc || 'V'}
           identificacion={person.identificacion}
-          maxLength={SECONDARY_IDENTIFICACION_MAX_LENGTH}
+          maxLength={secondaryIdentificacionMax(person.tipoDoc)}
           loading={identityLoading}
           onTipoDocChange={(v) => onChange({ tipoDoc: v })}
           onIdentificacionChange={(v) =>
-            onChange({ identificacion: v.slice(0, SECONDARY_IDENTIFICACION_MAX_LENGTH) })
+            onChange({ identificacion: v.slice(0, secondaryIdentificacionMax(person.tipoDoc)) })
           }
           onIdentificacionBlur={onIdentificacionBlur}
         />
@@ -323,7 +323,7 @@ export function FuneralStep() {
     const req = (v?: string) => !(v ?? '').trim();
     const len = (v?: string) => (v ?? '').trim().length;
 
-    const idErr = validateSecondaryPersonIdentificacion(p.identificacion);
+    const idErr = validateSecondaryPersonIdentificacion(p.identificacion, p.tipoDoc);
     if (idErr) e.identificacion = idErr;
 
     if (req(p.nombre)) {
