@@ -4,6 +4,7 @@ import type { CatalogItem } from '../lib/api';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../lib/field-limits';
 
 interface PersonLike {
+  cpais?: number;
   cestado?: number;
   estado?: string;
   cciudad?: number;
@@ -25,7 +26,15 @@ interface PersonLocationFieldsProps {
   catalogsLoading: boolean;
   /** Flujo Exélixi: estados locales + ciudad texto libre (sin valrep). */
   exelixiFlow: boolean;
+  /** Placa extranjera: muestra el país de la dirección (Venezuela / Colombia). */
+  showPais?: boolean;
 }
+
+/** Países con estados y ciudades en Sis2000 (mapaises). */
+const PAISES_DIRECCION = [
+  { value: '58', label: 'Venezuela' },
+  { value: '57', label: 'Colombia' },
+];
 
 export function PersonLocationFields({
   person,
@@ -36,10 +45,35 @@ export function PersonLocationFields({
   ciuState,
   catalogsLoading,
   exelixiFlow,
+  showPais = false,
 }: PersonLocationFieldsProps) {
+  const esColombia = showPais && person.cpais === 57;
   return (
     <>
-      <Field anchor={`cli-${prefix}estado`} label="Estado *" error={errors[`${prefix}estado`]}>
+      {showPais && (
+        <Field
+          anchor={`cli-${prefix}pais`}
+          label="País de residencia *"
+          hint="Vehículo extranjero: indique dónde reside el cliente"
+        >
+          <SearchSelect
+            value={person.cpais ?? 58}
+            options={PAISES_DIRECCION}
+            onChange={(code) => {
+              const cpais = code ? Number(code) : 58;
+              if (cpais === person.cpais) return;
+              // Cambia el país: los estados y ciudades son de otro catálogo.
+              setPerson({ cpais, estado: '', cestado: undefined, ciudad: '', cciudad: undefined });
+            }}
+            placeholder="Seleccione país"
+          />
+        </Field>
+      )}
+      <Field
+        anchor={`cli-${prefix}estado`}
+        label={esColombia ? 'Departamento *' : 'Estado *'}
+        error={errors[`${prefix}estado`]}
+      >
         <SearchSelect
           value={person.cestado}
           options={estados.map((s) => ({ value: String(s.code), label: s.label }))}
@@ -51,7 +85,7 @@ export function PersonLocationFields({
               cciudad: undefined,
             });
           }}
-          placeholder="Seleccione estado"
+          placeholder={esColombia ? 'Seleccione departamento' : 'Seleccione estado'}
           loading={catalogsLoading}
         />
       </Field>

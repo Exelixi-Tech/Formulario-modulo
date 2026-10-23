@@ -196,18 +196,21 @@ async function getRecargosRcv(cramo = 18) {
 }
 
 /** @returns {Promise<Array<{ cestado: number, xdescripcion_l: string }>>} */
-async function getValrepStates() {
-  const { data } = await axios.get(`${getBaseUrl()}/api/v1/valrep/states`, await axiosOpts());
+async function getValrepStates(cpais) {
+  const pais = cpais != null && cpais !== '' ? parseInt(String(cpais), 10) : null;
+  const qs = pais && pais !== 58 ? `?cpais=${pais}` : '';
+  const { data } = await axios.get(`${getBaseUrl()}/api/v1/valrep/states${qs}`, await axiosOpts());
   return data?.data?.states ?? [];
 }
 
 /** @returns {Promise<Array<{ cciudad: number, xdescripcion_l: string }>>} */
-async function getValrepCities(cestado) {
+async function getValrepCities(cestado, cpais) {
   const base = `${getBaseUrl()}/api/v1/valrep/cities`;
-  const url =
-    cestado != null && cestado !== ''
-      ? `${base}?cestado=${parseInt(String(cestado), 10)}`
-      : base;
+  const params = new URLSearchParams();
+  if (cestado != null && cestado !== '') params.set('cestado', String(parseInt(String(cestado), 10)));
+  const pais = cpais != null && cpais !== '' ? parseInt(String(cpais), 10) : null;
+  if (pais && pais !== 58) params.set('cpais', String(pais));
+  const url = params.toString() ? `${base}?${params.toString()}` : base;
   const { data } = await axios.get(url, await axiosOpts());
   return data?.data?.cities ?? [];
 }
