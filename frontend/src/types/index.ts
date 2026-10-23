@@ -77,6 +77,8 @@ export type TomadorData = {
   declaraVeracidad?: boolean;
   /** Acepta los Términos y Condiciones de contratación electrónica La Mundial. */
   aceptaTerminos?: boolean;
+  /** País de la dirección (mapaises.cpais): 58 Venezuela (default), 57 Colombia (placa extranjera). */
+  cpais?: number;
   /** Código numérico La Mundial del estado (cestado). Se obtiene del selector de catálogo. */
   cestado?: number;
   /** Código numérico La Mundial de la ciudad (cciudad). Se obtiene del selector de catálogo. */
@@ -106,6 +108,8 @@ export type PersonData = {
   sexo?: string;
   estadoCivil?: string;
   estado?: string;
+  /** País de la dirección (mapaises.cpais): 58 Venezuela (default), 57 Colombia. */
+  cpais?: number;
   cestado?: number;
   ciudad?: string;
   cciudad?: number;
@@ -164,6 +168,8 @@ export interface FuneralPerson {
   email?: string;
   estadoCivil?: string;
   estado?: string;
+  /** País de la dirección (mapaises.cpais): 58 Venezuela (default), 57 Colombia. */
+  cpais?: number;
   cestado?: number;
   ciudad?: string;
   cciudad?: number;

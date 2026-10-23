@@ -54,9 +54,11 @@ function logError(tag, err) {
   console.error(`[valrep/${tag}]`, err?.response?.status, err?.message);
 }
 
-router.get('/state', async (_req, res) => {
+router.get('/state', async (req, res) => {
+  // cpais opcional (57 Colombia, placa extranjera). Sin cpais = Venezuela, como siempre.
+  const cpais = req.query.cpais ?? null;
   try {
-    const states = await getValrepStates();
+    const states = await getValrepStates(cpais);
     const items = normalizeItems(states.map((s) => ({ code: s.cestado, label: s.xdescripcion_l })));
     if (!items.length) {
       console.warn('[valrep/state] nest-api devolvió 0 estados — verificar NEST_API_URL y NEST_API_KEY');
@@ -70,8 +72,9 @@ router.get('/state', async (_req, res) => {
 
 router.get('/city', async (req, res) => {
   const cestado = req.query.cestado ?? req.query.estado ?? null;
+  const cpais = req.query.cpais ?? null;
   try {
-    const cities = await getValrepCities(cestado);
+    const cities = await getValrepCities(cestado, cpais);
     const items = normalizeItems(cities.map((c) => ({ code: c.cciudad, label: c.xdescripcion_l })));
     res.json({
       ok: true,
