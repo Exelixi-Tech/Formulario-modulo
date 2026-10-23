@@ -112,6 +112,8 @@ interface WizardActions {
   setPatrimoniales: (data: Partial<PatrimonialesData>) => void;
   setCategory: (c: string) => void;
   setSelectedPlan: (plan: Plan | null) => void;
+  setProveedor: (proveedor: import('../types').ProveedorItem | null) => void;
+  setCproveedor: (cproveedor: number | string | null) => void;
   setPaymentMethod: (m: PaymentMethod) => void;
   setPolicy: (p: IssuedPolicy) => void;
   setQuote: (q: PolicyQuote, vehicleSignature: string) => void;
@@ -149,6 +151,8 @@ const initialState: WizardState = {
   vehicle: defaultVehicle(),
   category: '',
   selectedPlan: null,
+  selectedProveedor: null,
+  cproveedor: null,
   // 'mobile' (Pago MÃ³vil vÃ­a Banco Activo) es el mÃ©todo activo por defecto.
   // 'transfer' estÃ¡ oculto en la UI por ahora; se mantendrÃ¡ el tipo para compat.
   paymentMethod: 'mobile',
@@ -229,9 +233,17 @@ export const useWizardStore = create<WizardState & WizardActions>()((set) => ({
   setPatrimoniales: (data) =>
     set((s) => ({ patrimoniales: { ...s.patrimoniales, ...data } })),
 
-  setCategory: (category) => set({ category, selectedPlan: null }),
+  setCategory: (category) => set({ category, selectedPlan: null, selectedProveedor: null, cproveedor: null }),
 
   setSelectedPlan: (selectedPlan) => set({ selectedPlan }),
+
+  setProveedor: (selectedProveedor) =>
+    set({
+      selectedProveedor,
+      cproveedor: selectedProveedor ? selectedProveedor.cci_rif : null,
+    }),
+
+  setCproveedor: (cproveedor) => set({ cproveedor }),
 
   setPaymentMethod: (paymentMethod) => set({ paymentMethod }),
 

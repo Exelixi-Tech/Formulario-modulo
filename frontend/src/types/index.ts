@@ -120,6 +120,11 @@ export type PersonData = {
   estatura?: string;
 };
 
+export interface ProveedorItem {
+  xproveedor: string;
+  cci_rif: number | string;
+  [key: string]: unknown;
+}
 export interface PlanParentesco {
   cparen: number;
   xparentesco: string;
@@ -140,6 +145,9 @@ export interface Plan {
   sumaAsegurada: number;
   /** Sufijo opcional para la suma asegurada (ej. "/unidad") */
   sumaAseguradaUnit?: string;
+  cramo?: number;
+  centidad?: number;
+  citem?: number;
   /** Parentescos admitidos por el plan (GET/POST personas/planes). */
   parentescos?: PlanParentesco[];
 }
@@ -295,6 +303,10 @@ export interface WizardState {
   vehicle: VehicleData;
   category: string;
   selectedPlan: Plan | null;
+  /** Proveedor de servicio seleccionado (plan-proveedor) */
+  selectedProveedor?: ProveedorItem | null;
+  /** Código o RIF del proveedor de servicio (se envía como { cproveedor: cci_rif }) */
+  cproveedor?: number | string | null;
   paymentMethod: PaymentMethod;
   policy: IssuedPolicy | null;
   /** Cotizacion vigente desde La Mundial (mprima/mprimaext/ptasa). */

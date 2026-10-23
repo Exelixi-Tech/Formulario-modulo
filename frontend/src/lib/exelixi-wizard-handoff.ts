@@ -13,6 +13,8 @@ export interface ExelixiWizardHandoff {
   patrimoniales?: unknown;
   category?: string;
   selectedPlan?: unknown;
+  cproveedor?: number | string | null;
+  selectedProveedor?: unknown;
   quote?: unknown;
   quoteVehicleSignature?: string;
   quoteState?: string;
