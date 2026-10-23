@@ -5,6 +5,7 @@ import { IdentityInput } from '../../components/ui/IdentityInput';
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { PersonLocationFields } from '../../components/PersonLocationFields';
+import { isExtranjeroCarnet } from '../../lib/ocr-binacional';
 import { useCatalogs, useCiudades, useEstadosPais } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
@@ -254,7 +255,11 @@ export function EmissionStep() {
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
   // Placa extranjera: dirección en Venezuela o Colombia (catálogos por país; Sis2000 guarda cpais).
   const tipoPlaca = useWizardStore((s) => s.vehicle?.tipoPlaca);
-  const showPaisDireccion = isRcvEmision && !exelixiFlow && tipoPlaca === 'extranjera';
+  // vehicle.tipoPlaca se fija en el paso del vehículo (después de este); el OCR del
+  // certificado ya dice si es extranjero (Licencia de Tránsito CO) desde el inicio.
+  const certOcrPais = useWizardStore((s) => s.documents.certificado?.ocr);
+  const placaExtranjera = tipoPlaca === 'extranjera' || isExtranjeroCarnet(certOcrPais);
+  const showPaisDireccion = isRcvEmision && !exelixiFlow && placaExtranjera;
   const paisTomador = showPaisDireccion ? (tomador.cpais ?? 57) : 58;
   const paisAsegurado = showPaisDireccion ? (asegurado.cpais ?? 57) : 58;
   const estadosColombia = useEstadosPais(
