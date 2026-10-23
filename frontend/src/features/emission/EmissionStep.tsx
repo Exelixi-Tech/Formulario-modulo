@@ -5,7 +5,7 @@ import { IdentityInput } from '../../components/ui/IdentityInput';
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { PersonLocationFields } from '../../components/PersonLocationFields';
-import { useCatalogs, useCiudades } from '../../hooks/useCatalogs';
+import { useCatalogs, useCiudades, useEstadosPais } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
@@ -252,8 +252,24 @@ export function EmissionStep() {
   const showProfesion = isRcvEmision && formConfig?.campos?.cprofesion?.activo !== false;
   const showActividad = isRcvEmision && formConfig?.campos?.cactividad?.activo !== false;
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
-  const ciudadesState = useCiudades(tomador.cestado);
-  const aseguradoCiudades = useCiudades(asegurado.cestado);
+  // Placa extranjera: dirección en Venezuela o Colombia (catálogos por país; Sis2000 guarda cpais).
+  const tipoPlaca = useWizardStore((s) => s.vehicle?.tipoPlaca);
+  const showPaisDireccion = isRcvEmision && !exelixiFlow && tipoPlaca === 'extranjera';
+  const paisTomador = showPaisDireccion ? (tomador.cpais ?? 57) : 58;
+  const paisAsegurado = showPaisDireccion ? (asegurado.cpais ?? 57) : 58;
+  const estadosColombia = useEstadosPais(
+    showPaisDireccion && (paisTomador === 57 || paisAsegurado === 57) ? 57 : null,
+  );
+  const ciudadesState = useCiudades(tomador.cestado, paisTomador);
+  const aseguradoCiudades = useCiudades(asegurado.cestado, paisAsegurado);
+
+  // Por defecto Colombia para placa extranjera (si aún no eligió país ni estado).
+  useEffect(() => {
+    if (!showPaisDireccion) return;
+    if (tomador.cpais == null && !tomador.cestado) setTomador({ cpais: 57 });
+    if (asegurado.cpais == null && !asegurado.cestado) setAsegurado({ cpais: 57 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPaisDireccion]);
   /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
   /** Viajero: sin cobertura para indemnizar a un beneficiario, no se piden beneficiarios. */
@@ -953,10 +969,11 @@ export function EmissionStep() {
         setPerson={setPerson}
         prefix={prefix}
         errors={errors}
-        estados={catalogs.estados}
+        estados={showPaisDireccion && person.cpais === 57 ? estadosColombia.estados : catalogs.estados}
         ciuState={ciuState}
-        catalogsLoading={catalogs.loading}
+        catalogsLoading={showPaisDireccion && person.cpais === 57 ? estadosColombia.loading : catalogs.loading}
         exelixiFlow={exelixiFlow}
+        showPais={showPaisDireccion && (prefix === 'tom_' || prefix === 'aseg_')}
       />
       <Field
         anchor={`cli-${prefix}fechaNac`}
