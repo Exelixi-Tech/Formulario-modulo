@@ -12,6 +12,7 @@ import { useWizardStore } from '../store/wizardStore';
 import { getProductConfig } from '../lib/product';
 import { isCotizadorFlow } from '../lib/cotizador-flow';
 import { toast } from '../store/toastStore';
+import { tarjetaYaPagada } from '../lib/rcv-tarjeta-flow';
 import { StepGlyph, StepKicker, StepperFxStyles, StepperProgress, STEPPER_TONE_NAVY } from './StepperFx';
 
 type StepItem = { n: number; label: string; Icon: typeof Car; displayStep?: number };
@@ -25,6 +26,9 @@ export function TopStepper() {
   const ocrDone = useWizardStore((s) => s.ocrDone);
   const documents = useWizardStore((s) => s.documents);
   const selectedPlan = useWizardStore((s) => s.selectedPlan);
+  const metadataCanal = useWizardStore((s) => s.metadataCanal);
+  // Tarjeta ya pagada en caja (Farmatodo): el paso Pago no existe en este flujo.
+  const sinPasoPago = tarjetaYaPagada(metadataCanal);
   const product = getProductConfig();
   const cotizadorRcv = isCotizadorFlow() && product.id === 'rcv';
   const [navigating, setNavigating] = useState(false);
@@ -54,7 +58,7 @@ export function TopStepper() {
             ? [{ n: 3, label: 'Personas', Icon: Users }]
             : []),
         { n: 4, label: 'Plan', Icon: ShieldCheck },
-        { n: 5, label: 'Pago', Icon: CreditCard },
+        ...(sinPasoPago ? [] : [{ n: 5, label: 'Pago', Icon: CreditCard }]),
       ]
     : [
         { n: 1, label: 'Documentos', Icon: FileText },
@@ -63,7 +67,7 @@ export function TopStepper() {
           ? [{ n: 3, label: 'Vehículo', Icon: Car }]
           : [{ n: 3, label: product.id === 'patrimoniales' ? 'Bien' : 'Personas', Icon: product.id === 'patrimoniales' ? Building2 : Users }]),
         { n: 4, label: 'Plan', Icon: ShieldCheck },
-        { n: 5, label: 'Pago', Icon: CreditCard },
+        ...(sinPasoPago ? [] : [{ n: 5, label: 'Pago', Icon: CreditCard }]),
       ];
 
   /** Pasos que este módulo renderiza localmente. */
@@ -126,7 +130,7 @@ export function TopStepper() {
   const prevStep = getPreviousAllowedStep(step);
   const maxStep = cotizadorRcv || product.exelixiCatalog
     ? (STEPS[STEPS.length - 1]?.n ?? 2)
-    : 5;
+    : (sinPasoPago ? 4 : 5);
   const canPrev = prevStep != null && !navigating && canGoTo(prevStep);
   const nextTarget = step + 1;
   const canNext = step < maxStep && !navigating && canGoTo(nextTarget);
