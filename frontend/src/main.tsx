@@ -14,15 +14,30 @@ import { useWizardStore } from './store/wizardStore'
 import { isFunerario, isRcv, usesFuneralStep } from './lib/product'
 import { applyMetadataFromNexusToken, getNexusTokenFromUrl } from './lib/nexus-token-client'
 import { mergeMarketplaceActorMetadata, rememberMarketplaceActorFromToken } from './lib/sso-metadata'
-import { hydrateTarjetaMetadataCanal, isTarjetaRcvFlow, markTarjetaPublicSession } from './lib/rcv-tarjeta-flow'
+import {
+  hydrateTarjetaHandoff,
+  hydrateTarjetaMetadataCanal,
+  isTarjetaRcvFlow,
+  isTarjetaVolver,
+  markTarjetaPublicSession,
+} from './lib/rcv-tarjeta-flow'
+import { applyWizardStepFromUrl } from './lib/wizard-step'
 
 // Identidad Exélixi (colores + favicon) solo si el flujo activo es el catálogo.
 applyExelixiBranding('Formulario');
 
+// Regreso desde Emisión/Pagos por el paso a paso: se restaura lo que el cliente ya llenó.
+const tarjetaVolver = isTarjetaVolver() && hydrateTarjetaHandoff();
+
 if (isTarjetaRcvFlow()) {
   markTarjetaPublicSession();
   hydrateTarjetaMetadataCanal();
-  useWizardStore.getState().setVehicle({ tipoPlaca: 'nacional', tipoCarnet: 'nacional' });
+  if (tarjetaVolver) {
+    useWizardStore.getState().setOcrDone(true);
+    applyWizardStepFromUrl(useWizardStore.getState().goTo);
+  } else {
+    useWizardStore.getState().setVehicle({ tipoPlaca: 'nacional', tipoCarnet: 'nacional' });
+  }
 }
 
 rememberMarketplaceActorFromToken(getNexusTokenFromUrl());
@@ -60,6 +75,9 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
         goTo(3);
         return;
       }
+
+      // Al volver por el paso a paso ya se restauró el estado completo: no reaplicar el OCR.
+      if (tarjetaVolver) return;
 
       const handoffApplied = applyExelixiOcrHandoff({
         setDocState,

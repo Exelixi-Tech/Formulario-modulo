@@ -1,5 +1,5 @@
 import { useWizardStore } from '../store/wizardStore';
-import { persistFlowHandoff } from './flow-handoff';
+import { persistFlowHandoff, readFlowHandoff } from './flow-handoff';
 
 /** Header para APIs sin nexus_token en flujo farmacia RCV. */
 export const TARJETA_FLOW_HEADER = 'X-Rcv-Tarjeta-Flow';
@@ -156,4 +156,58 @@ export function tarjetaYaPagada(metadataCanal?: Record<string, unknown> | null):
   if (String(metadataCanal.flujo ?? '').trim().toLowerCase() !== 'tarjeta') return false;
   const v = (x: unknown) => x === true || x === 1 || x === '1' || x === 'true';
   return v(metadataCanal.skipPayment) || v(metadataCanal.bfactura);
+}
+
+/** Módulo dueño de cada paso del flujo tarjeta (sin bridge): 1 OCR · 2-3 Formulario · 4 Emisión · 5 Pagos. */
+function tarjetaStepModulePath(step: number): string {
+  if (step <= 1) return '/ocr';
+  if (step <= 3) return '/formulario';
+  if (step === 4) return '/emision';
+  return '/pagos';
+}
+
+/** Este módulo (Formulario) pinta los pasos 2 y 3. */
+export function isTarjetaLocalStep(step: number): boolean {
+  return step === 2 || step === 3;
+}
+
+/**
+ * Paso a paso en flujo tarjeta (sin bridge): ir a un paso de otro módulo guardando el estado.
+ * `volver=1` indica al módulo destino que hidrate desde el handoff y no desde el OCR.
+ */
+export function navigateTarjetaToStep(step: number): void {
+  const meta = useWizardStore.getState().metadataCanal;
+  if (meta?.cplan) persistTarjetaMetadataCanal(meta as Record<string, unknown>);
+  persistFlowHandoff(collectWizardSnapshot());
+  markTarjetaPublicSession();
+  const params = new URLSearchParams({
+    product: getTarjetaProductId(),
+    flujo: 'tarjeta',
+    wizardStep: String(step),
+    volver: '1',
+  });
+  window.location.href = `${tarjetaStepModulePath(step)}/?${params.toString()}`;
+}
+
+/** Regreso desde Emisión/Pagos (?volver=1): el estado viene del handoff, no del OCR. */
+export function isTarjetaVolver(): boolean {
+  if (!isTarjetaRcvFlow()) return false;
+  try {
+    return new URLSearchParams(window.location.search).get('volver') === '1';
+  } catch {
+    return false;
+  }
+}
+
+/** Hidrata el wizard con lo que el cliente ya llenó (al volver desde un módulo posterior). */
+export function hydrateTarjetaHandoff(): boolean {
+  const local = readFlowHandoff();
+  if (!local) return false;
+  const set = (useWizardStore as unknown as { setState: (p: Record<string, unknown>) => void }).setState;
+  const filtered: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(local)) {
+    if (k !== 'step' && typeof v !== 'function') filtered[k] = v;
+  }
+  set(filtered);
+  return true;
 }

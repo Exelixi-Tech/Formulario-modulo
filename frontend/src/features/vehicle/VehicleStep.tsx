@@ -407,6 +407,7 @@ export function VehicleStep() {
   }, [vehicle.año, isBinacional, loadMarcas, resetModelos]);
 
   // ── Cuando cargan las marcas: auto-seleccionar OCR marca ─────────────────
+  const tarjetaOcrMarca = shouldUseTarjetaPublicApi() ? (ocrCert?.marca ?? '') : '';
   useEffect(() => {
     if (!marcas.length) return;
     if (autoSelectedMarca.current) return;
@@ -458,9 +459,10 @@ export function VehicleStep() {
         );
       }
     }
-  // Solo cuando marcas cambia
+  // Solo cuando marcas cambia. En tarjeta el OCR se aplica al abrir la página y puede llegar
+  // después que el catálogo: se reintenta cuando aparece la marca del carnet.
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [marcas]);
+  }, [marcas, tarjetaOcrMarca]);
 
   // ── Cuando cambia cmarca: cargar modelos ─────────────────────────────────
   useEffect(() => {
