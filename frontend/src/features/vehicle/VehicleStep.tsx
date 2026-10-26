@@ -1368,7 +1368,10 @@ export function VehicleStep() {
             <div className="sm:col-span-2 flex items-center gap-2 px-3 py-2 rounded-xl bg-emerald-50 border border-emerald-200 text-xs text-emerald-700">
               <ShieldCheck size={14} className="shrink-0 text-emerald-500" />
               <span>
-                <strong>{vehicle.marca} {vehicle.modelo}</strong> listo para cotización — selecciona el plan en el siguiente paso.
+                <strong>{vehicle.marca} {vehicle.modelo}</strong>
+                {shouldUseTarjetaPublicApi()
+                  ? ' listo. El plan ya viene definido por tu tarjeta: continúa para emitir.'
+                  : ' listo para cotización — selecciona el plan en el siguiente paso.'}
               </span>
             </div>
           )}
