@@ -6,9 +6,23 @@ export function countIdentificacionDigits(value?: string): number {
   return (value ?? '').replace(/\D/g, '').length;
 }
 
+/** Documento extranjero (E) o pasaporte (P): ej. cédula de ciudadanía Colombia, hasta 10 dígitos. */
+export const FOREIGN_IDENTIFICACION_DIGITS_MAX = 10;
+
+function isForeignTipoDoc(tipoDoc?: string): boolean {
+  const t = String(tipoDoc ?? '').trim().toUpperCase();
+  return t === 'E' || t === 'P';
+}
+
+/** Máximo de dígitos según tipo de documento: V = cédula venezolana (8); E/P = extranjero (10). */
+export function secondaryIdentificacionMax(tipoDoc?: string): number {
+  return isForeignTipoDoc(tipoDoc) ? FOREIGN_IDENTIFICACION_DIGITS_MAX : venezuelanCedulaDigitsMax;
+}
+
 /** Validación de cédula para asegurado, beneficiario y conductor (no tomador). */
 export function validateSecondaryPersonIdentificacion(
   identificacion?: string,
+  tipoDoc?: string,
 ): string | undefined {
   const digits = countIdentificacionDigits(identificacion);
   if (!String(identificacion ?? '').trim() || digits === 0) {
@@ -17,7 +31,11 @@ export function validateSecondaryPersonIdentificacion(
   if (digits < venezuelanCedulaDigitsMin) {
     return `La identificación debe tener al menos ${venezuelanCedulaDigitsMin} dígitos`;
   }
-  if (digits > venezuelanCedulaDigitsMax) {
+  if (isForeignTipoDoc(tipoDoc)) {
+    if (digits > FOREIGN_IDENTIFICACION_DIGITS_MAX) {
+      return `La identificación no puede tener más de ${FOREIGN_IDENTIFICACION_DIGITS_MAX} dígitos (documento extranjero)`;
+    }
+  } else if (digits > venezuelanCedulaDigitsMax) {
     return `La identificación no puede tener más de ${venezuelanCedulaDigitsMax} dígitos (cédula venezolana)`;
   }
   return undefined;

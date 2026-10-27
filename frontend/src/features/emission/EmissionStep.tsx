@@ -5,7 +5,8 @@ import { IdentityInput } from '../../components/ui/IdentityInput';
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { PersonLocationFields } from '../../components/PersonLocationFields';
-import { useCatalogs, useCiudades } from '../../hooks/useCatalogs';
+import { isExtranjeroCarnet } from '../../lib/ocr-binacional';
+import { useCatalogs, useCiudades, useEstadosPais } from '../../hooks/useCatalogs';
 import { useProductConfig } from '../../hooks/useProductConfig';
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
@@ -35,7 +36,7 @@ import { User, Heart, ShieldAlert, FileText } from 'lucide-react';
 import { formatTelefono, isValidPhonePrefix } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
 import {
-  SECONDARY_IDENTIFICACION_MAX_LENGTH,
+  secondaryIdentificacionMax,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
 import {
@@ -252,8 +253,28 @@ export function EmissionStep() {
   const showProfesion = isRcvEmision && formConfig?.campos?.cprofesion?.activo !== false;
   const showActividad = isRcvEmision && formConfig?.campos?.cactividad?.activo !== false;
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
-  const ciudadesState = useCiudades(tomador.cestado);
-  const aseguradoCiudades = useCiudades(asegurado.cestado);
+  // Placa extranjera: dirección en Venezuela o Colombia (catálogos por país; Sis2000 guarda cpais).
+  const tipoPlaca = useWizardStore((s) => s.vehicle?.tipoPlaca);
+  // vehicle.tipoPlaca se fija en el paso del vehículo (después de este); el OCR del
+  // certificado ya dice si es extranjero (Licencia de Tránsito CO) desde el inicio.
+  const certOcrPais = useWizardStore((s) => s.documents.certificado?.ocr);
+  const placaExtranjera = tipoPlaca === 'extranjera' || isExtranjeroCarnet(certOcrPais);
+  const showPaisDireccion = isRcvEmision && !exelixiFlow && placaExtranjera;
+  const paisTomador = showPaisDireccion ? (tomador.cpais ?? 57) : 58;
+  const paisAsegurado = showPaisDireccion ? (asegurado.cpais ?? 57) : 58;
+  const estadosColombia = useEstadosPais(
+    showPaisDireccion && (paisTomador === 57 || paisAsegurado === 57) ? 57 : null,
+  );
+  const ciudadesState = useCiudades(tomador.cestado, paisTomador);
+  const aseguradoCiudades = useCiudades(asegurado.cestado, paisAsegurado);
+
+  // Por defecto Colombia para placa extranjera (si aún no eligió país ni estado).
+  useEffect(() => {
+    if (!showPaisDireccion) return;
+    if (tomador.cpais == null && !tomador.cestado) setTomador({ cpais: 57 });
+    if (asegurado.cpais == null && !asegurado.cestado) setAsegurado({ cpais: 57 });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [showPaisDireccion]);
   /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
   /** Viajero: sin cobertura para indemnizar a un beneficiario, no se piden beneficiarios. */
@@ -650,7 +671,7 @@ export function EmissionStep() {
       const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
 
       if (opts?.secondaryIdent) {
-        const idErr = validateSecondaryPersonIdentificacion(person.identificacion);
+        const idErr = validateSecondaryPersonIdentificacion(person.identificacion, person.tipoDoc);
         if (idErr) e[`${prefix}identificacion`] = idErr;
       } else if (req(person.identificacion)) {
         e[`${prefix}identificacion`] = 'La identificación es obligatoria';
@@ -759,7 +780,7 @@ export function EmissionStep() {
       bens.forEach((b, i) => {
         if (!funeralBeneficiarioTieneDatos(b)) return;
         filled += 1;
-        const idErr = validateSecondaryPersonIdentificacion(b.identificacion);
+        const idErr = validateSecondaryPersonIdentificacion(b.identificacion, b.tipoDoc);
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
         if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
@@ -781,6 +802,17 @@ export function EmissionStep() {
       }
     } else if (hasBeneficiary && !tarjetaFlow && !checkPatrimonialesFlow) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
+    }
+
+    // Declaración de fe + Términos y Condiciones (mismas de las emisiones La Mundial).
+    // Funerario/personas tiene su propia aceptación en el cuestionario.
+    if (!checkFuneralFlow) {
+      if (!tomador.declaraVeracidad) {
+        e.tom_declaraVeracidad = 'Debe declarar que los datos proporcionados son ciertos para continuar';
+      }
+      if (!tomador.aceptaTerminos) {
+        e.tom_aceptaTerminos = 'Debe aceptar los Términos y Condiciones para continuar';
+      }
     }
 
     setErrors(e);
@@ -873,7 +905,7 @@ export function EmissionStep() {
           identificacion={person.identificacion ?? ''}
           maxLength={
             opts?.secondaryIdent
-              ? SECONDARY_IDENTIFICACION_MAX_LENGTH
+              ? secondaryIdentificacionMax(person.tipoDoc)
               : PERSON_FIELD_LIMITS.identificacion
           }
           loading={Boolean(lookupLoading[prefix])}
@@ -953,10 +985,11 @@ export function EmissionStep() {
         setPerson={setPerson}
         prefix={prefix}
         errors={errors}
-        estados={catalogs.estados}
+        estados={showPaisDireccion && person.cpais === 57 ? estadosColombia.estados : catalogs.estados}
         ciuState={ciuState}
-        catalogsLoading={catalogs.loading}
+        catalogsLoading={showPaisDireccion && person.cpais === 57 ? estadosColombia.loading : catalogs.loading}
         exelixiFlow={exelixiFlow}
+        showPais={showPaisDireccion && (prefix === 'tom_' || prefix === 'aseg_')}
       />
       <Field
         anchor={`cli-${prefix}fechaNac`}
@@ -1126,6 +1159,53 @@ export function EmissionStep() {
             onChange={(v) => setTomador({ personaPoliticamenteExpuesta: v })}
             label="Soy una Persona Políticamente Expuesta (PPE)"
           />
+          {!checkFuneralFlow && (
+            <div className="mt-4 space-y-3">
+              <div id="cli-tom_declaraVeracidad">
+                <label className="flex gap-3 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(tomador.declaraVeracidad)}
+                    onChange={(ev) => setTomador({ declaraVeracidad: ev.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+                  />
+                  <span className="text-sm text-slate-700 leading-relaxed">
+                    Declaro que todos los datos proporcionados son ciertos, completos, libres de falsificación,
+                    reticencia y omisión, y autorizo a cualquier institución u organismo público o privado para que
+                    antes o después de un evento cubierto por la póliza suministre cualquier dato de interés para el
+                    asegurador.
+                  </span>
+                </label>
+                {errors.tom_declaraVeracidad && (
+                  <p className="mt-1 ml-7 text-xs font-semibold text-rose-600">{errors.tom_declaraVeracidad}</p>
+                )}
+              </div>
+              <div id="cli-tom_aceptaTerminos">
+                <label className="flex gap-3 items-start cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(tomador.aceptaTerminos)}
+                    onChange={(ev) => setTomador({ aceptaTerminos: ev.target.checked })}
+                    className="mt-0.5 h-4 w-4 shrink-0 accent-indigo-600"
+                  />
+                  <span className="text-sm text-slate-700 leading-relaxed">
+                    He leído y aceptado los{' '}
+                    <a
+                      href={`${import.meta.env.BASE_URL}legal/terminos-y-condiciones-lms.pdf`}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="font-bold text-indigo-600 underline"
+                    >
+                      Términos y Condiciones
+                    </a>
+                  </span>
+                </label>
+                {errors.tom_aceptaTerminos && (
+                  <p className="mt-1 ml-7 text-xs font-semibold text-rose-600">{errors.tom_aceptaTerminos}</p>
+                )}
+              </div>
+            </div>
+          )}
         </SectionCard>
 
         {/* Asegurado (Titular) */}
@@ -1206,11 +1286,11 @@ export function EmissionStep() {
                       <IdentityInput
                         tipoDoc={ben.tipoDoc || 'V'}
                         identificacion={ben.identificacion}
-                        maxLength={SECONDARY_IDENTIFICACION_MAX_LENGTH}
+                        maxLength={secondaryIdentificacionMax(ben.tipoDoc)}
                         onTipoDocChange={(v) => patchFuneralBeneficiario(idx, { tipoDoc: v })}
                         onIdentificacionChange={(v) =>
                           patchFuneralBeneficiario(idx, {
-                            identificacion: v.slice(0, SECONDARY_IDENTIFICACION_MAX_LENGTH),
+                            identificacion: v.slice(0, secondaryIdentificacionMax(ben.tipoDoc)),
                           })
                         }
                       />

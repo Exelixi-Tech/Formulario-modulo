@@ -499,9 +499,9 @@ async function _fetchValrep(path: string): Promise<CatalogItem[]> {
   return items;
 }
 
-/** Lista de estados venezolanos con código La Mundial */
-export function getEstados(): Promise<CatalogItem[]> {
-  return _fetchValrep('/valrep/state');
+/** Estados con código La Mundial. Sin cpais (o 58) = Venezuela; 57 = Colombia (placa extranjera). */
+export function getEstados(cpais?: number | null): Promise<CatalogItem[]> {
+  return _fetchValrep(cpais && cpais !== 58 ? `/valrep/state?cpais=${cpais}` : '/valrep/state');
 }
 
 /**
@@ -509,9 +509,13 @@ export function getEstados(): Promise<CatalogItem[]> {
  * Si no se pasa cestado, devuelve todas las ciudades del país.
  * Cada estado se cachea por separado.
  */
-export function getCiudades(cestado?: number | null): Promise<CatalogItem[]> {
-  const path = cestado ? `/valrep/city?cestado=${cestado}` : '/valrep/city';
-  return _fetchValrep(path);
+export function getCiudades(cestado?: number | null, cpais?: number | null): Promise<CatalogItem[]> {
+  const params = new URLSearchParams();
+  if (cestado) params.set('cestado', String(cestado));
+  // Colombia (57): los códigos DANE se cruzan con los de Venezuela → filtrar también por país.
+  if (cpais && cpais !== 58) params.set('cpais', String(cpais));
+  const qs = params.toString();
+  return _fetchValrep(qs ? `/valrep/city?${qs}` : '/valrep/city');
 }
 
 /**

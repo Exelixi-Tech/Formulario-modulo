@@ -129,7 +129,7 @@ export interface CiudadesState {
  * Carga las ciudades correspondientes al estado seleccionado (La Mundial).
  * En Exélixi catálogo no consulta valrep.
  */
-export function useCiudades(cestado?: number | null): CiudadesState {
+export function useCiudades(cestado?: number | null, cpais?: number | null): CiudadesState {
   const exelixiFlow = isExelixiCatalogFlow();
   const [state, setState] = useState<CiudadesState>({ ciudades: [], loading: false, error: null });
 
@@ -141,7 +141,7 @@ export function useCiudades(cestado?: number | null): CiudadesState {
     let cancelled = false;
     setState({ ciudades: [], loading: true, error: null });
 
-    getCiudades(cestado)
+    getCiudades(cestado, cpais)
       .then((ciudades) => {
         if (!cancelled) setState({ ciudades, loading: false, error: null });
       })
@@ -151,7 +151,35 @@ export function useCiudades(cestado?: number | null): CiudadesState {
       });
 
     return () => { cancelled = true; };
-  }, [cestado, exelixiFlow]);
+  }, [cestado, cpais, exelixiFlow]);
+
+  return state;
+}
+
+/**
+ * Estados de un país distinto de Venezuela (ej. 57 Colombia, placa extranjera).
+ * Sin cpais o con 58 devuelve lista vacía: Venezuela sigue saliendo de useCatalogs().
+ */
+export function useEstadosPais(cpais?: number | null): { estados: CatalogItem[]; loading: boolean } {
+  const [state, setState] = useState<{ estados: CatalogItem[]; loading: boolean }>({ estados: [], loading: false });
+
+  useEffect(() => {
+    if (!cpais || cpais === 58) {
+      setState({ estados: [], loading: false });
+      return;
+    }
+    let cancelled = false;
+    setState({ estados: [], loading: true });
+    getEstados(cpais)
+      .then((estados) => {
+        if (!cancelled) setState({ estados, loading: false });
+      })
+      .catch((err) => {
+        console.warn(`[useEstadosPais] Error cargando estados del país ${cpais}:`, err.message);
+        if (!cancelled) setState({ estados: [], loading: false });
+      });
+    return () => { cancelled = true; };
+  }, [cpais]);
 
   return state;
 }
