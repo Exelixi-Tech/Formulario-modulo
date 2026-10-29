@@ -762,7 +762,7 @@ export function EmissionStep() {
       const hasProf = Boolean(tomador.cprofesion || tomador.xprofesion);
       const hasAct = Boolean(tomador.cactividad || tomador.xactividad);
       if (!hasProf && !hasAct) {
-        e.tom_profesion = 'Indique profesión o actividad económica';
+        e.tom_profesion = 'Indique ocupación o actividad económica';
       }
     }
     if (!sameInsured || checkFuneralFlow) {
@@ -1093,7 +1093,7 @@ export function EmissionStep() {
         />
       </Field>
       {prefix === 'tom_' && isRcvEmision && showProfesion && (
-        <Field anchor="cli-tom_profesion" label="Profesión *" error={errors.tom_profesion}>
+        <Field anchor="cli-tom_profesion" label="Ocupación *" error={errors.tom_profesion}>
           <SearchSelect
             value={person.cprofesion ?? ''}
             options={catalogs.profesiones.map((o) => ({ value: o.code, label: o.label }))}
@@ -1102,7 +1102,7 @@ export function EmissionStep() {
             }}
             placeholder="— Seleccionar —"
             loading={catalogs.loading}
-            noOptionsText="Sin profesiones disponibles"
+            noOptionsText="Sin ocupaciones disponibles"
           />
         </Field>
       )}
@@ -1114,7 +1114,7 @@ export function EmissionStep() {
             onChange={(code, label) => {
               setPerson({ cactividad: code, xactividad: label });
             }}
-            placeholder="— Seleccionar (si no indicó profesión) —"
+            placeholder="— Seleccionar (si no indicó ocupación) —"
             loading={catalogs.loading}
             noOptionsText="Sin actividades disponibles"
           />
