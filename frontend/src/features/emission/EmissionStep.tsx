@@ -783,10 +783,13 @@ export function EmissionStep() {
       if (showProfesion && !tomador.cprofesion) {
         e.tom_profesion = 'Seleccione la profesión';
       }
-      const hasOcup = Boolean(tomador.cocupacion || tomador.xocupacion);
-      const hasAct = Boolean(tomador.cactividad || tomador.xactividad);
-      if (!hasOcup && !hasAct) {
-        e.tom_ocupacion = 'Indique ocupación o actividad económica';
+      // Solo se exige lo que está en pantalla: con ambos campos ocultos no hay nada que pedir.
+      const hasOcup = showOcupacion && Boolean(tomador.cocupacion || tomador.xocupacion);
+      const hasAct = showActividad && Boolean(tomador.cactividad || tomador.xactividad);
+      if ((showOcupacion || showActividad) && !hasOcup && !hasAct) {
+        e.tom_ocupacion = showOcupacion && showActividad
+          ? 'Indique ocupación o actividad económica'
+          : showOcupacion ? 'Seleccione la ocupación' : 'Seleccione la actividad económica';
       }
     }
     if (!sameInsured || checkFuneralFlow) {
@@ -1145,7 +1148,11 @@ export function EmissionStep() {
         </Field>
       )}
       {prefix === 'tom_' && isRcvEmision && showActividad && (
-        <Field label="Actividad económica *" error={errors.tom_ocupacion}>
+        <Field
+          anchor={showOcupacion ? undefined : 'cli-tom_ocupacion'}
+          label="Actividad económica *"
+          error={errors.tom_ocupacion}
+        >
           <SearchSelect
             value={person.cactividad ?? ''}
             options={catalogs.actividades.map((o) => ({ value: o.code, label: o.label }))}
