@@ -51,6 +51,7 @@ export interface PersonFormPatch {
   cciudad?: number;
   direccion?: string;
   xprofesion?: string;
+  xocupacion?: string;
   xactividad?: string;
   peso?: string;
   estatura?: string;
@@ -136,7 +137,8 @@ export function mapProprietaryToPerson(
     estado: estadoLabel,
     ciudad: clipPersonField('ciudad', String(info.xciudad ?? '').trim()),
     direccion: clipPersonField('direccion', String(info.xavecalle ?? '').trim()),
-    xprofesion: clipPersonField('nombre', String(info.xprofesion ?? info.xocupacion ?? '').trim()) || undefined,
+    xprofesion: clipPersonField('nombre', String(info.xprofesion ?? '').trim()) || undefined,
+    xocupacion: clipPersonField('nombre', String(info.xocupacion ?? '').trim()) || undefined,
     xactividad: clipPersonField('nombre', String(info.xactividad ?? '').trim()) || undefined,
   };
 
@@ -172,6 +174,7 @@ const SIS2000_CONTACT_KEYS: Array<keyof PersonFormPatch> = [
   'cciudad',
   'direccion',
   'xprofesion',
+  'xocupacion',
   'xactividad',
   'peso',
   'estatura',

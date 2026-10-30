@@ -237,9 +237,15 @@ function mapValrepGetList(raw) {
     .filter((it) => it.code !== '' && it.label !== '');
 }
 
-/** Profesiones — sp_get_ocupaciones_nexus @returns {Promise<Array<{ code: string, label: string }>>} */
+/** Ocupaciones — sp_get_ocupaciones_nexus (maocupac) @returns {Promise<Array<{ code: string, label: string }>>} */
 async function getValrepOcupaciones() {
   const { data } = await axios.get(`${getBaseUrl()}/api/v1/valrep/ocupaciones`, await axiosOpts());
+  return mapValrepGetList(data?.data?.listas);
+}
+
+/** Profesiones — sp_get_profesiones_nexus (maprofes) @returns {Promise<Array<{ code: string, label: string }>>} */
+async function getValrepProfesiones() {
+  const { data } = await axios.get(`${getBaseUrl()}/api/v1/valrep/profesiones`, await axiosOpts());
   return mapValrepGetList(data?.data?.listas);
 }
 
@@ -428,5 +434,6 @@ module.exports = {
   getValrepCities,
   getValrepList,
   getValrepOcupaciones,
+  getValrepProfesiones,
   getValrepActividades,
 };
