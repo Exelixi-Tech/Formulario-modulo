@@ -1,5 +1,5 @@
 import type { CatalogItem } from './api';
-import type { TomadorData } from '../types';
+import type { ProfesionOcupacionFields, TomadorData } from '../types';
 
 /**
  * Profesión (maprofes → cprofesion) y ocupación (maocupac → cocupacion) del tomador RCV.
@@ -10,6 +10,50 @@ type ProfesionOcupacion = Pick<
   TomadorData,
   'cprofesion' | 'xprofesion' | 'cocupacion' | 'xocupacion' | 'ocupacionSeparada'
 >;
+
+/** Qué campos se muestran (y por lo tanto se exigen). */
+export interface ProfesionOcupacionVisibility {
+  profesion: boolean;
+  ocupacion: boolean;
+  actividad: boolean;
+}
+
+/**
+ * Profesión obligatoria y además ocupación o actividad económica, solo de lo que está en
+ * pantalla. Claves: `${prefix}profesion` y `${prefix}ocupacion`.
+ */
+export function validateProfesionOcupacion(
+  person: ProfesionOcupacionFields,
+  prefix: string,
+  visible: ProfesionOcupacionVisibility,
+): Record<string, string> {
+  const e: Record<string, string> = {};
+  // La emisión necesita el código: un nombre autollenado sin código en el catálogo no basta.
+  if (visible.profesion && !person.cprofesion) {
+    e[`${prefix}profesion`] = 'Seleccione la profesión';
+  }
+  const hasOcup = visible.ocupacion && Boolean(person.cocupacion || person.xocupacion);
+  const hasAct = visible.actividad && Boolean(person.cactividad || person.xactividad);
+  if ((visible.ocupacion || visible.actividad) && !hasOcup && !hasAct) {
+    e[`${prefix}ocupacion`] = visible.ocupacion && visible.actividad
+      ? 'Indique ocupación o actividad económica'
+      : visible.ocupacion ? 'Seleccione la ocupación' : 'Seleccione la actividad económica';
+  }
+  return e;
+}
+
+/** Profesión, ocupación y actividad de `src` para copiarlas a otra persona. */
+export function pickProfesionOcupacion(src: ProfesionOcupacionFields): ProfesionOcupacionFields {
+  return {
+    cprofesion: src.cprofesion,
+    xprofesion: src.xprofesion,
+    cocupacion: src.cocupacion,
+    xocupacion: src.xocupacion,
+    cactividad: src.cactividad,
+    xactividad: src.xactividad,
+    ocupacionSeparada: src.ocupacionSeparada,
+  };
+}
 
 function normalizeLabel(label: string): string {
   return label

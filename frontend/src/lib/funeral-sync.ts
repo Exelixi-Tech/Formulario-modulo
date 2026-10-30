@@ -1,5 +1,6 @@
 import { useWizardStore } from '../store/wizardStore';
 import type { FuneralPerson, PersonData, TomadorData } from '../types';
+import { pickProfesionOcupacion } from './profesion-ocupacion';
 
 type PersonSource = TomadorData | PersonData | FuneralPerson;
 
@@ -46,6 +47,7 @@ export function syncTitularFromTomador(): void {
         direccion: src.direccion,
         peso,
         estatura,
+        ...pickProfesionOcupacion(src),
       },
       ...funeral.asegurados.slice(1),
     ],
