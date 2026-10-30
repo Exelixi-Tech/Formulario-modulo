@@ -101,7 +101,13 @@ export type TomadorData = {
   estatura?: string;
 };
 
-export type PersonData = {
+/** Profesión, ocupación y actividad económica (mismos campos que el tomador). */
+export type ProfesionOcupacionFields = Pick<
+  TomadorData,
+  'cprofesion' | 'xprofesion' | 'cocupacion' | 'xocupacion' | 'cactividad' | 'xactividad' | 'ocupacionSeparada'
+>;
+
+export type PersonData = ProfesionOcupacionFields & {
   nombre: string;
   apellido: string;
   identificacion: string;
@@ -161,7 +167,7 @@ export type PaymentMethod = 'card' | 'transfer' | 'mobile' | 'otp';
  *  - identificacion   → xrif_*
  *  - parentesco       → nparentesco_* (1=Titular, 2=Cónyuge, 3=Hijo…)
  */
-export interface FuneralPerson {
+export interface FuneralPerson extends ProfesionOcupacionFields {
   tipoDoc: string;
   identificacion: string;
   nombre: string;
