@@ -3,6 +3,7 @@
  */
 const express = require('express');
 const { checkPolizaVigentePersonas, getPlanesPersonas } = require('../services/nestApiClient');
+const { evaluarPolizaVigenteTitular } = require('../services/polizaVigenteRegla');
 
 const router = express.Router();
 
@@ -64,32 +65,38 @@ router.get('/planes', async (req, res) => {
 });
 
 /**
- * Ramos donde buscar la póliza vigente. El SSO trae el ramo del producto (vida 47),
- * pero las pólizas quedan en el ramo del plan (vida 1): se agregan los ramos de los
- * planes del producto. Funerario (57 / sin producto) sigue solo en su ramo.
+ * Planes (ramo + plan) que ofrece el producto del canal. El SSO trae el ramo del producto
+ * (vida 47), pero las pólizas quedan en el ramo de cada plan (vida 1): la búsqueda usa esos ramos.
+ * Si no se pueden leer devuelve [] y se busca solo en el ramo indicado.
  */
-async function ramosPolizaVigente(req, cramo) {
+async function planesDelProducto(req, cramo) {
   const meta = funeralCanalFromReq(req);
-  const cproducto = String(req.body?.cproducto ?? meta.cproducto ?? '').trim();
-  const ramos = [cramo];
-  if (!cproducto || cproducto === '57') return ramos;
+  const cproducto = String(
+    req.body?.cproducto ?? meta.cproducto ?? process.env.LAMUNDIAL_PRODUCTO_FUNERARIO ?? '',
+  ).trim() || '57';
   if (String(meta.cproductor || '') === '80080') delete meta.cproductor;
   try {
     const planes = await getPlanesPersonas(cramo, { ...meta, cproducto });
-    for (const plan of planes) {
-      const n = Number(plan?.cramo);
-      if (Number.isInteger(n) && n > 0 && !ramos.includes(n)) ramos.push(n);
-    }
+    return planes
+      .map((p) => ({ cramo: Number(p?.cramo), cplan: String(p?.cplan ?? '').trim() }))
+      .filter((p) => Number.isInteger(p.cramo) && p.cramo > 0 && p.cplan);
   } catch (err) {
     console.warn('[personas/poliza-vigente] planes del producto:', err instanceof Error ? err.message : err);
+    return [];
   }
-  return ramos;
 }
 
 router.post('/poliza-vigente', async (req, res) => {
   const rif = String(req.body?.rif ?? req.body?.identificacion ?? '').replace(/\D/g, '');
   const cramo = req.body?.cramo != null ? Number(req.body.cramo) : 9;
   const tipoPoliza = cramo === 9 ? 'póliza funeraria vigente' : 'póliza vigente de este producto';
+  // Plan a contratar, si ya se conoce (tarjeta o al volver desde Emisión). Sin plan solo se tranca
+  // si el producto no deja ningún plan disponible; el plan exacto lo vuelve a validar Emisión (SP).
+  const cplan = String(req.body?.cplan ?? '').trim();
+  const cramoPlan = Number(req.body?.cramoPlan);
+  const plan = cplan
+    ? { cplan, cramo: Number.isInteger(cramoPlan) && cramoPlan > 0 ? cramoPlan : undefined }
+    : null;
 
   if (rif.length < 6) {
     return res.status(400).json({
@@ -100,18 +107,32 @@ router.post('/poliza-vigente', async (req, res) => {
   }
 
   try {
-    let result = { hasVigente: false };
-    for (const ramo of await ramosPolizaVigente(req, cramo)) {
-      result = await checkPolizaVigentePersonas({ rif, cramo: ramo });
-      if (result.hasVigente) break;
+    const catalogo = plan ? [] : await planesDelProducto(req, cramo);
+    const ramos = plan?.cramo ? [plan.cramo] : [...new Set([cramo, ...catalogo.map((p) => p.cramo)])];
+    const vigentes = [];
+    for (const ramo of ramos) {
+      const result = await checkPolizaVigentePersonas({ rif, cramo: ramo });
+      if (result.hasVigente) vigentes.push({ cramo: ramo, cplan: result.cplan, cnpoliza: result.cnpoliza });
     }
-    if (result.hasVigente) {
+    const { blocked, vigente } = evaluarPolizaVigenteTitular({ plan, vigentes, catalogo });
+    const poliza = vigente?.cnpoliza ? ` (póliza ${vigente.cnpoliza})` : '';
+    if (blocked) {
+      const queTiene = plan ? 'este plan' : catalogo.length > 1 ? 'los planes de este producto' : 'el plan de este producto';
       return res.status(200).json({
         success: true,
         blocked: true,
         code: 'PERSONAS_DUPLICATE',
-        cnpoliza: result.cnpoliza,
-        message: `Ya existe una ${tipoPoliza} para esta cédula.`,
+        cnpoliza: vigente?.cnpoliza,
+        message: `Esta cédula ya tiene vigente ${queTiene}${poliza}. No se puede contratar el mismo plan otra vez.`,
+      });
+    }
+    if (vigente) {
+      return res.json({
+        success: true,
+        blocked: false,
+        cnpoliza: vigente.cnpoliza,
+        aviso: `Esta cédula ya tiene una ${tipoPoliza} del plan ${vigente.cplan}${poliza}. Puede contratar otro plan, no el mismo.`,
+        message: `Tiene una ${tipoPoliza} del plan ${vigente.cplan}.`,
       });
     }
     return res.json({
