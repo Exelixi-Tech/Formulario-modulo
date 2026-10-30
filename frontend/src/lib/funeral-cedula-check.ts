@@ -26,6 +26,7 @@ export function polizaVigenteLabel(cramo: number): string {
 /**
  * Consulta Sis2000: ¿esta cédula ya tiene póliza vigente en el ramo del producto?
  * Si tiene menos de 6 dígitos no consulta (aún incompleta).
+ * Si la consulta falla (p. ej. 403 de nest-api) lanza error: no se puede afirmar que no tiene póliza.
  */
 export async function cedulaTienePolizaVigente(identificacion: string, cramo = FUNERARIO_RAMO): Promise<{
   blocked: boolean;
@@ -41,6 +42,9 @@ export async function cedulaTienePolizaVigente(identificacion: string, cramo = F
       message: res.message || `Ya existe una ${polizaVigenteLabel(cramo)} para esta cédula.`,
       cnpoliza: res.cnpoliza,
     };
+  }
+  if (!res.success) {
+    throw new Error(res.message || 'No se pudo verificar la cédula.');
   }
   return { blocked: false, message: '' };
 }
