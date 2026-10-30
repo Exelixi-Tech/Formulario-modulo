@@ -15,6 +15,7 @@ import {
   cedulaTienePolizaVigente,
   polizaVigenteCramo,
   polizaVigenteLabel,
+  polizaVigenteNoConfirmada,
 } from '../../lib/funeral-cedula-check';
 import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import {
@@ -581,14 +582,13 @@ export function EmissionStep() {
           2800,
         );
         return true;
-      } catch {
+      } catch (err) {
         lastFuneralCedula.current[prefix] = '';
         lastFuneralOk.current[prefix] = false;
-        toast.warning(
-          'No se pudo verificar la cédula',
-          'Inténtalo de nuevo antes de continuar.',
-          4000,
-        );
+        if (err instanceof Error) console.warn('[poliza-vigente]', err.message);
+        const msg = polizaVigenteNoConfirmada(polizaCramo);
+        setErrors((prev) => ({ ...prev, [`${prefix}identificacion`]: msg }));
+        toast.warning('No se pudo confirmar la póliza vigente', msg, 6000);
         return false;
       } finally {
         setLookupLoading((s) => ({ ...s, [prefix]: false }));
