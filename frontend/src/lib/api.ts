@@ -691,6 +691,8 @@ export interface CheckCedulaPolizaResult {
   code?: string;
   cnpoliza?: string;
   message?: string;
+  /** Tiene póliza vigente de otro plan: se informa pero no tranca (la regla es titular + plan). */
+  aviso?: string;
 }
 
 export interface FuneralPlanPer {
@@ -741,16 +743,18 @@ export async function fetchFuneralPlanes(cramo = 9): Promise<FuneralPlanPer[]> {
   return data.planes ?? [];
 }
 
-/** ¿Hay póliza funeraria vigente para esta cédula? (Sis2000 adpoliza). */
+/** ¿Hay póliza vigente para esta cédula? (Sis2000 adpoliza). Con plan, la regla es ramo + plan. */
 export async function checkFuneralCedulaPoliza(
   identificacion: string,
   cramo = 9,
+  plan?: { cplan: string; cramo?: number } | null,
 ): Promise<CheckCedulaPolizaResult> {
   const rif = String(identificacion || '').replace(/\D/g, '');
   try {
     const { data } = await api.post<CheckCedulaPolizaResult>('/personas/poliza-vigente', {
       rif,
       cramo,
+      ...(plan?.cplan ? { cplan: plan.cplan, cramoPlan: plan.cramo } : {}),
     });
     return {
       success: data.success !== false,
@@ -758,6 +762,7 @@ export async function checkFuneralCedulaPoliza(
       code: data.code,
       cnpoliza: data.cnpoliza,
       message: data.message,
+      aviso: data.aviso,
     };
   } catch (err) {
     const axErr = err as AxiosError<CheckCedulaPolizaResult>;
