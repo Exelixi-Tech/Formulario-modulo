@@ -36,6 +36,13 @@ import { User, Heart, ShieldAlert, FileText } from 'lucide-react';
 import { formatTelefono, isValidPhonePrefix } from '../../lib/phone';
 import { PERSON_FIELD_LIMITS, clipPersonField } from '../../lib/field-limits';
 import {
+  migrateOcupacionSeparada,
+  pickProfesionOcupacion,
+  resolveProfesionOcupacionCodes,
+  validateProfesionOcupacion,
+} from '../../lib/profesion-ocupacion';
+import { ProfesionOcupacionFields } from '../../components/ProfesionOcupacionFields';
+import {
   secondaryIdentificacionMax,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
@@ -207,6 +214,9 @@ function focusClientError(errors: ValidationErrors) {
   const ordered = [
     ...CLIENT_PREFIXES.flatMap((p) => CLIENT_FIELD_ORDER.map((f) => `${p}${f}`)),
     'tom_profesion',
+    'tom_ocupacion',
+    'aseg_profesion',
+    'aseg_ocupacion',
     ...extras,
   ];
   const first = ordered.find((k) => errors[k]);
@@ -250,8 +260,13 @@ export function EmissionStep() {
   const isRcvEmision = isRcvLaMundialFlow() && !isCotizadorFlow();
   const producto = getProductId();
   const { config: formConfig } = useProductConfig(EMPRESA_ID, producto, 'formulario');
-  const showProfesion = isRcvEmision && formConfig?.campos?.cprofesion?.activo !== false;
-  const showActividad = isRcvEmision && formConfig?.campos?.cactividad?.activo !== false;
+  // Personas (funerario, vida, AP, salud…): profesión y ocupación del tomador y del titular.
+  const personasProfesionFlow = (isFunerario() || usesFuneralStep()) && !exelixiFlow && !isCotizadorFlow();
+  const pideProfesion = isRcvEmision || personasProfesionFlow;
+  const showProfesion = pideProfesion && formConfig?.campos?.cprofesion?.activo !== false;
+  const showOcupacion = pideProfesion && formConfig?.campos?.cocupacion?.activo !== false;
+  const showActividad = pideProfesion && formConfig?.campos?.cactividad?.activo !== false;
+  const profesionVisible = { profesion: showProfesion, ocupacion: showOcupacion, actividad: showActividad };
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
   // Placa extranjera: dirección en Venezuela o Colombia (catálogos por país; Sis2000 guarda cpais).
   const tipoPlaca = useWizardStore((s) => s.vehicle?.tipoPlaca);
@@ -275,6 +290,23 @@ export function EmissionStep() {
     if (asegurado.cpais == null && !asegurado.cestado) setAsegurado({ cpais: 57 });
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [showPaisDireccion]);
+
+  // Profesión y ocupación viajan por separado a la emisión (ocupacionSeparada). Un tomador de la
+  // versión anterior trae la ocupación en cprofesion: se pasa a cocupacion.
+  useEffect(() => {
+    if (!isRcvEmision) return;
+    const patch = migrateOcupacionSeparada(tomador);
+    if (patch) setTomador(patch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRcvEmision, tomador.ocupacionSeparada]);
+
+  // Sis2000 autollena solo el nombre de la profesión/ocupación: se busca el código en el catálogo.
+  useEffect(() => {
+    if (!pideProfesion || catalogs.loading) return;
+    const patch = resolveProfesionOcupacionCodes(tomador, catalogs);
+    if (patch) setTomador(patch);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [pideProfesion, catalogs.loading, tomador.xprofesion, tomador.xocupacion]);
   /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
   /** Viajero: sin cobertura para indemnizar a un beneficiario, no se piden beneficiarios. */
@@ -333,10 +365,14 @@ export function EmissionStep() {
       ciudad: tomador.ciudad,
       cciudad: tomador.cciudad,
       direccion: tomador.direccion,
+      ...pickProfesionOcupacion(tomador),
     });
   }, [
     checkFuneralFlow,
     sameInsured,
+    tomador.cprofesion,
+    tomador.cocupacion,
+    tomador.cactividad,
     tomador.tipoDoc,
     tomador.identificacion,
     tomador.nombre,
@@ -758,12 +794,12 @@ export function EmissionStep() {
     validatePerson(tomador, 'tom_', {
       secondaryIdent: checkFuneralFlow || (isRcvEmision && sameInsured !== false),
     });
-    if (isRcvEmision && !esPJ) {
-      const hasProf = Boolean(tomador.cprofesion || tomador.xprofesion);
-      const hasAct = Boolean(tomador.cactividad || tomador.xactividad);
-      if (!hasProf && !hasAct) {
-        e.tom_profesion = 'Indique ocupación o actividad económica';
-      }
+    if (pideProfesion && !esPJ) {
+      Object.assign(e, validateProfesionOcupacion(tomador, 'tom_', profesionVisible));
+    }
+    // Personas: el titular que no es el tomador trae su propia profesión y ocupación.
+    if (personasProfesionFlow && sameInsured === false) {
+      Object.assign(e, validateProfesionOcupacion(asegurado, 'aseg_', profesionVisible));
     }
     if (!sameInsured || checkFuneralFlow) {
       validatePerson(asegurado, 'aseg_', {
@@ -1092,33 +1128,16 @@ export function EmissionStep() {
           maxLength={PERSON_FIELD_LIMITS.direccion}
         />
       </Field>
-      {prefix === 'tom_' && isRcvEmision && showProfesion && (
-        <Field anchor="cli-tom_profesion" label="Ocupación *" error={errors.tom_profesion}>
-          <SearchSelect
-            value={person.cprofesion ?? ''}
-            options={catalogs.profesiones.map((o) => ({ value: o.code, label: o.label }))}
-            onChange={(code, label) => {
-              setPerson({ cprofesion: code, xprofesion: label });
-            }}
-            placeholder="— Seleccionar —"
-            loading={catalogs.loading}
-            noOptionsText="Sin ocupaciones disponibles"
-          />
-        </Field>
-      )}
-      {prefix === 'tom_' && isRcvEmision && showActividad && (
-        <Field label="Actividad económica *" error={errors.tom_profesion}>
-          <SearchSelect
-            value={person.cactividad ?? ''}
-            options={catalogs.actividades.map((o) => ({ value: o.code, label: o.label }))}
-            onChange={(code, label) => {
-              setPerson({ cactividad: code, xactividad: label });
-            }}
-            placeholder="— Seleccionar (si no indicó ocupación) —"
-            loading={catalogs.loading}
-            noOptionsText="Sin actividades disponibles"
-          />
-        </Field>
+      {(prefix === 'tom_' || (prefix === 'aseg_' && personasProfesionFlow && sameInsured === false))
+        && pideProfesion && (
+        <ProfesionOcupacionFields
+          person={person}
+          setPerson={setPerson}
+          prefix={prefix}
+          catalogs={catalogs}
+          errors={errors}
+          visible={profesionVisible}
+        />
       )}
     </div>
   );

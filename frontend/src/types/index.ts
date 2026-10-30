@@ -91,17 +91,31 @@ export type TomadorData = {
   cestado?: number;
   /** Código numérico La Mundial de la ciudad (cciudad). Se obtiene del selector de catálogo. */
   cciudad?: number;
-  /** Circular SAA-02-1079-2026 — código profesión La Mundial. */
+  /** Circular SAA-02-1079-2026 — código profesión La Mundial (maprofes). */
   cprofesion?: number | string;
+  /** Código ocupación La Mundial (maocupac). */
+  cocupacion?: number | string;
   cactividad?: number | string;
   xprofesion?: string;
+  xocupacion?: string;
   xactividad?: string;
+  /**
+   * true: cprofesion es profesión y cocupacion ocupación. Sin la marca, cprofesion trae la ocupación
+   * (versión anterior del formulario) y la emisión la guarda como ocupación.
+   */
+  ocupacionSeparada?: boolean;
   itipoDiligencia?: 'S' | 'C';
   peso?: string;
   estatura?: string;
 };
 
-export type PersonData = {
+/** Profesión, ocupación y actividad económica (mismos campos que el tomador). */
+export type ProfesionOcupacionFields = Pick<
+  TomadorData,
+  'cprofesion' | 'xprofesion' | 'cocupacion' | 'xocupacion' | 'cactividad' | 'xactividad' | 'ocupacionSeparada'
+>;
+
+export type PersonData = ProfesionOcupacionFields & {
   nombre: string;
   apellido: string;
   identificacion: string;
@@ -161,7 +175,7 @@ export type PaymentMethod = 'card' | 'transfer' | 'mobile' | 'otp';
  *  - identificacion   → xrif_*
  *  - parentesco       → nparentesco_* (1=Titular, 2=Cónyuge, 3=Hijo…)
  */
-export interface FuneralPerson {
+export interface FuneralPerson extends ProfesionOcupacionFields {
   tipoDoc: string;
   identificacion: string;
   nombre: string;
