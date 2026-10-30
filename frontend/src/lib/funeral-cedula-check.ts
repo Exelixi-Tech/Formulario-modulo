@@ -24,6 +24,14 @@ export function polizaVigenteLabel(cramo: number): string {
 }
 
 /**
+ * Texto cuando la consulta no responde: no se sabe si la cédula tiene póliza vigente.
+ * @param cramo ramo consultado
+ */
+export function polizaVigenteNoConfirmada(cramo: number): string {
+  return `No se pudo confirmar si esta cédula ya tiene una ${polizaVigenteLabel(cramo)}. Inténtalo de nuevo; si continúa, avisa a soporte.`;
+}
+
+/**
  * Consulta Sis2000: ¿esta cédula ya tiene póliza vigente en el ramo del producto?
  * Si tiene menos de 6 dígitos no consulta (aún incompleta).
  * Si la consulta falla (p. ej. 403 de nest-api) lanza error: no se puede afirmar que no tiene póliza.

@@ -404,13 +404,14 @@ export function FuneralStep() {
         2800,
       );
       return true;
-    } catch {
+    } catch (err) {
       lastAsegCedula.current[idx] = digits;
       lastAsegOk.current[idx] = true;
+      if (err instanceof Error) console.warn('[poliza-vigente]', err.message);
       toast.warning(
-        'No se pudo verificar la cédula',
-        'Puedes continuar. Revisa la cédula si el sistema no respondió.',
-        4000,
+        'No se pudo confirmar la póliza vigente',
+        `No se pudo confirmar si este asegurado ya tiene una ${polizaVigenteLabel(polizaCramo)}. Puedes continuar; revisa la cédula.`,
+        6000,
       );
       return true;
     } finally {
