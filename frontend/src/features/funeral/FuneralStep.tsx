@@ -381,36 +381,30 @@ export function FuneralStep() {
     setCedulaChecking((s) => ({ ...s, [idx]: true }));
     try {
       const res = await cedulaTienePolizaVigente(digits, polizaCramo);
-      if (res.blocked) {
-        lastAsegOk.current[idx] = false;
-        setAsegErrors((prev) => {
-          const next = [...prev];
-          next[idx] = { ...(next[idx] ?? {}), identificacion: res.message };
-          return next;
-        });
-        toast.warning(
-          'No se puede asegurar',
-          res.cnpoliza
-            ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
-            : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
+      lastAsegOk.current[idx] = true;
+      if (res.blocked || res.aviso) {
+        // La regla de no repetir plan es solo del titular (como el SP): al asegurado adicional se le informa.
+        toast.info(
+          'Asegurado con póliza vigente',
+          `Este asegurado ya tiene una ${polizaVigenteLabel(polizaCramo)}${res.cnpoliza ? ` (${res.cnpoliza})` : ''}. La regla de no repetir plan aplica al titular; puede incluirse.`,
           8000,
         );
-        return false;
+        return true;
       }
-      lastAsegOk.current[idx] = true;
       toast.success(
         'Se puede asegurar',
         `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
         2800,
       );
       return true;
-    } catch {
+    } catch (err) {
       lastAsegCedula.current[idx] = digits;
       lastAsegOk.current[idx] = true;
+      if (err instanceof Error) console.warn('[poliza-vigente]', err.message);
       toast.warning(
-        'No se pudo verificar la cédula',
-        'Puedes continuar. Revisa la cédula si el sistema no respondió.',
-        4000,
+        'No se pudo confirmar la póliza vigente',
+        `No se pudo confirmar si este asegurado ya tiene una ${polizaVigenteLabel(polizaCramo)}. Puedes continuar; revisa la cédula.`,
+        6000,
       );
       return true;
     } finally {

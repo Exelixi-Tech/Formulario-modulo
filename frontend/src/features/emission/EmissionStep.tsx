@@ -14,7 +14,9 @@ import { getProductId, isFunerario, isPatrimoniales, isRcvLaMundialFlow, usesFun
 import {
   cedulaTienePolizaVigente,
   polizaVigenteCramo,
+  planParaPolizaVigente,
   polizaVigenteLabel,
+  polizaVigenteNoConfirmada,
 } from '../../lib/funeral-cedula-check';
 import { isViajeroPersonasCanal } from '../../lib/viajero-canal';
 import {
@@ -313,6 +315,11 @@ export function EmissionStep() {
   const sinBeneficiarios = skipPolizaVigente;
   /** Ramo donde se busca la póliza vigente: el del producto que manda el SSO. */
   const polizaCramo = polizaVigenteCramo(metadataCanal);
+  /** Plan a contratar, si ya se conoce (tarjeta o al volver desde Emisión): la regla es titular + ramo + plan. */
+  const selectedPlan = useWizardStore((s) => s.selectedPlan);
+  const planPolizaVigente = planParaPolizaVigente(selectedPlan, metadataCanal);
+  const planVigenteCplan = planPolizaVigente?.cplan ?? '';
+  const planVigenteCramo = planPolizaVigente?.cramo;
   /** Solo consulta adpoliza (titular/asegurado). No afecta campos del formulario funerario. */
   const checkPolizaVigente = (isFunerario() || usesFuneralStep()) && !skipPolizaVigente;
 
@@ -546,26 +553,22 @@ export function EmissionStep() {
     async (prefix: string, identificacion: string): Promise<boolean> => {
       const digits = String(identificacion || '').replace(/\D/g, '');
       if (digits.length < 6) return true;
-      if (lastFuneralCedula.current[prefix] === digits) {
+      const clave = `${digits}|${planVigenteCramo ?? ''}|${planVigenteCplan}`;
+      if (lastFuneralCedula.current[prefix] === clave) {
         return lastFuneralOk.current[prefix] !== false;
       }
-      lastFuneralCedula.current[prefix] = digits;
+      lastFuneralCedula.current[prefix] = clave;
       setLookupLoading((s) => ({ ...s, [prefix]: true }));
       try {
-        const res = await cedulaTienePolizaVigente(digits, polizaCramo);
+        const plan = planVigenteCplan ? { cplan: planVigenteCplan, cramo: planVigenteCramo } : null;
+        const res = await cedulaTienePolizaVigente(digits, polizaCramo, plan);
         if (res.blocked) {
           lastFuneralOk.current[prefix] = false;
           setErrors((prev) => ({
             ...prev,
             [`${prefix}identificacion`]: res.message,
           }));
-          toast.warning(
-            'No se puede asegurar',
-            res.cnpoliza
-              ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
-              : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
-            8000,
-          );
+          toast.warning('Póliza vigente', res.message, 8000);
           return false;
         }
         lastFuneralOk.current[prefix] = true;
@@ -575,26 +578,29 @@ export function EmissionStep() {
           const { [key]: _removed, ...rest } = prev;
           return rest;
         });
-        toast.success(
-          'Se puede asegurar',
-          `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
-          2800,
-        );
+        if (res.aviso) {
+          toast.info('Póliza vigente de otro plan', res.aviso, 8000);
+        } else {
+          toast.success(
+            'Se puede asegurar',
+            `No hay ${polizaVigenteLabel(polizaCramo)} para esta cédula.`,
+            2800,
+          );
+        }
         return true;
-      } catch {
+      } catch (err) {
         lastFuneralCedula.current[prefix] = '';
         lastFuneralOk.current[prefix] = false;
-        toast.warning(
-          'No se pudo verificar la cédula',
-          'Inténtalo de nuevo antes de continuar.',
-          4000,
-        );
+        if (err instanceof Error) console.warn('[poliza-vigente]', err.message);
+        const msg = polizaVigenteNoConfirmada(polizaCramo);
+        setErrors((prev) => ({ ...prev, [`${prefix}identificacion`]: msg }));
+        toast.warning('No se pudo confirmar la póliza vigente', msg, 6000);
         return false;
       } finally {
         setLookupLoading((s) => ({ ...s, [prefix]: false }));
       }
     },
-    [polizaCramo],
+    [polizaCramo, planVigenteCplan, planVigenteCramo],
   );
 
   const runFuneralCedulaAuto = useCallback(
