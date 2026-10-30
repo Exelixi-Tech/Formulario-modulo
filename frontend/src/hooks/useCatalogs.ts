@@ -1,5 +1,7 @@
 import { useEffect, useState } from 'react';
-import { getEstados, getCiudades, getValrepList, getOcupaciones, getActividades, type CatalogItem } from '../lib/api';
+import {
+  getEstados, getCiudades, getValrepList, getOcupaciones, getProfesiones, getActividades, type CatalogItem,
+} from '../lib/api';
 import { isExelixiCatalogFlow } from '../lib/exelixi-catalog';
 import { EXELIXI_VENEZUELA_ESTADOS } from '../lib/exelixi-local-catalog';
 
@@ -9,13 +11,14 @@ export interface Catalogs {
   estadosCivil: CatalogItem[];
   parentescos : CatalogItem[];
   profesiones : CatalogItem[];
+  ocupaciones : CatalogItem[];
   actividades : CatalogItem[];
   loading     : boolean;
   error       : string | null;
 }
 
 const EMPTY: Catalogs = {
-  estados: [], sexos: [], estadosCivil: [], parentescos: [], profesiones: [], actividades: [],
+  estados: [], sexos: [], estadosCivil: [], parentescos: [], profesiones: [], ocupaciones: [], actividades: [],
   loading: true, error: null,
 };
 
@@ -45,6 +48,7 @@ function exelixiLocalCatalogs(): Catalogs {
     estadosCivil: LIST_FALLBACKS.EDOCIVIL,
     parentescos: LIST_FALLBACKS.PARENTESCOS,
     profesiones: [],
+    ocupaciones: [],
     actividades: [],
     loading: false,
     error: null,
@@ -79,11 +83,12 @@ export function useCatalogs(): Catalogs {
     let cancelled = false;
 
     (async () => {
-      const [estadosR, sexosR, edoR, parR, profR, actR] = await Promise.allSettled([
+      const [estadosR, sexosR, edoR, parR, profR, ocupR, actR] = await Promise.allSettled([
         getEstados(),
         loadList('SEXO'),
         loadList('EDOCIVIL'),
         loadList('PARENTESCOS'),
+        getProfesiones(),
         getOcupaciones(),
         getActividades(),
       ]);
@@ -95,9 +100,10 @@ export function useCatalogs(): Catalogs {
       const estadosCivil = edoR.status === 'fulfilled' ? edoR.value : LIST_FALLBACKS.EDOCIVIL;
       const parentescos = parR.status === 'fulfilled' ? parR.value : LIST_FALLBACKS.PARENTESCOS;
       const profesiones = profR.status === 'fulfilled' ? profR.value : [];
+      const ocupaciones = ocupR.status === 'fulfilled' ? ocupR.value : [];
       const actividades = actR.status === 'fulfilled' ? actR.value : [];
 
-      const errors = [estadosR, sexosR, edoR, parR, profR, actR]
+      const errors = [estadosR, sexosR, edoR, parR, profR, ocupR, actR]
         .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
         .map((r) => r.reason?.message ?? String(r.reason));
 
@@ -107,6 +113,7 @@ export function useCatalogs(): Catalogs {
         estadosCivil,
         parentescos,
         profesiones,
+        ocupaciones,
         actividades,
         loading: false,
         error: errors.length ? errors.join('; ') : null,

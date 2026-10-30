@@ -91,11 +91,19 @@ export type TomadorData = {
   cestado?: number;
   /** Código numérico La Mundial de la ciudad (cciudad). Se obtiene del selector de catálogo. */
   cciudad?: number;
-  /** Circular SAA-02-1079-2026 — código profesión La Mundial. */
+  /** Circular SAA-02-1079-2026 — código profesión La Mundial (maprofes). */
   cprofesion?: number | string;
+  /** Código ocupación La Mundial (maocupac). */
+  cocupacion?: number | string;
   cactividad?: number | string;
   xprofesion?: string;
+  xocupacion?: string;
   xactividad?: string;
+  /**
+   * true: cprofesion es profesión y cocupacion ocupación. Sin la marca, cprofesion trae la ocupación
+   * (versión anterior del formulario) y la emisión la guarda como ocupación.
+   */
+  ocupacionSeparada?: boolean;
   itipoDiligencia?: 'S' | 'C';
   peso?: string;
   estatura?: string;
