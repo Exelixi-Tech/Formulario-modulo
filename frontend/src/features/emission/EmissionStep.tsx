@@ -57,6 +57,8 @@ import {
 import type { FuneralPerson } from '../../types';
 import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
+import { resolveOcrPersonRoles } from '../../lib/ocr-person-roles';
+import { TitularDistintoOcrAlert, TITULAR_SECTION_ANCHOR } from './TitularDistintoOcrAlert';
 
 /** Años cumplidos desde YYYY-MM-DD (calendario, sin UTC). */
 function edadCumplida(iso?: string): number | null {
@@ -344,6 +346,11 @@ export function EmissionStep() {
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
   const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
+  const cedulaOcr = useWizardStore((s) => s.documents.cedula?.ocr);
+  const licenciaOcr = useWizardStore((s) => s.documents.licencia?.ocr);
+  // El OCR activa «titular distinto» cuando el carnet está a nombre de otra cédula; se avisa arriba del paso.
+  const ocrRoles = resolveOcrPersonRoles(cedulaOcr, certOcr, licenciaOcr);
+  const titularDistintoPorCarnet = isRcvEmision && sameInsured === false && !ocrRoles.sameInsured;
 
   useEffect(() => {
     if (!isRcvEmision || sameInsured !== false || !certOcr) return;
@@ -1100,6 +1107,10 @@ export function EmissionStep() {
   return (
     <div className="animate-fade-in">
       <div className="space-y-5">
+        {titularDistintoPorCarnet && (
+          <TitularDistintoOcrAlert carnetIdentificacion={ocrRoles.asegurado?.identificacion} />
+        )}
+
         {/* Tomador (Base) */}
         <SectionCard
           Icon={User}
@@ -1182,21 +1193,23 @@ export function EmissionStep() {
         </SectionCard>
 
         {/* Asegurado (Titular) */}
-        <SectionCard
-          Icon={FileText}
-          title="Datos de la persona que será asegurada (Titular)"
-        >
-          <ToggleSwitch
-            checked={!sameInsured}
-            onChange={(v) => setSameInsured(!v)}
-            label="¿La persona que pagará la Póliza es diferente a la que será asegurada?"
-          />
-          {(checkFuneralFlow || !sameInsured) &&
-            renderPersonForm(asegurado, setAsegurado, 'aseg_', aseguradoCiudades, {
-              secondaryIdent: true,
-              funeralInsured: checkFuneralFlow,
-            })}
-        </SectionCard>
+        <div id={TITULAR_SECTION_ANCHOR} className="scroll-mt-4">
+          <SectionCard
+            Icon={FileText}
+            title="Datos de la persona que será asegurada (Titular)"
+          >
+            <ToggleSwitch
+              checked={!sameInsured}
+              onChange={(v) => setSameInsured(!v)}
+              label="¿La persona que pagará la Póliza es diferente a la que será asegurada?"
+            />
+            {(checkFuneralFlow || !sameInsured) &&
+              renderPersonForm(asegurado, setAsegurado, 'aseg_', aseguradoCiudades, {
+                secondaryIdent: true,
+                funeralInsured: checkFuneralFlow,
+              })}
+          </SectionCard>
+        </div>
 
         {checkFuneralFlow ? (
           <SectionCard
