@@ -746,10 +746,16 @@ export async function checkFuneralCedulaPoliza(
 ): Promise<CheckCedulaPolizaResult> {
   const rif = String(identificacion || '').replace(/\D/g, '');
   try {
+    // Renovación: la póliza que se renueva (cnpoliza_rel) no bloquea (ver server personas.js).
+    const renov = (useWizardStore.getState() as unknown as {
+      renovacion?: { flujo?: string; cnpoliza_rel?: string } | null;
+    }).renovacion;
+    const cnpolizaRel = renov?.flujo === 'renovacion' ? renov.cnpoliza_rel : undefined;
     const { data } = await api.post<CheckCedulaPolizaResult>('/personas/poliza-vigente', {
       rif,
       cramo,
       ...(plan?.cplan ? { cplan: plan.cplan, cramoPlan: plan.cramo } : {}),
+      ...(cnpolizaRel ? { cnpoliza_rel: cnpolizaRel } : {}),
     });
     return {
       success: data.success !== false,
@@ -769,6 +775,113 @@ export async function checkFuneralCedulaPoliza(
         message: axErr.response.data.message ?? 'No se pudo verificar la cédula.',
       };
     }
+    throw err;
+  }
+}
+
+// ──────────────────────────────────────────────────────────────────────
+//  Renovar = póliza nueva enlazada (server del módulo → nest-api /renovacion)
+// ──────────────────────────────────────────────────────────────────────
+
+export interface RenovacionPersonaApi {
+  cci_rif: string | null;
+  icedula: string | null;
+  cid?: string | null;
+  xnombre: string | null;
+  xapellido: string | null;
+  xcliente?: string | null;
+  isexo: string | null;
+  iestado_civil: string | null;
+  fnacimiento: string | null;
+  xtelefono?: string | null;
+  xcorreo?: string | null;
+  cestado?: string | null;
+  cciudad?: string | null;
+  xdireccion?: string | null;
+}
+
+export interface RenovacionPlanApi {
+  cramo: number | null;
+  cplan: string | null;
+  xplan: string | null;
+  cproducto: string | null;
+  cmoneda?: string | null;
+}
+
+export interface RenovacionApiData {
+  tipo: 'RCV' | 'PERSONAS' | string;
+  elegible: boolean;
+  motivo: string | null;
+  mensaje: string | null;
+  forzada_fuera_ventana?: boolean;
+  renovada_por?: string | null;
+  poliza_origen: {
+    cnpoliza: string | null;
+    cramo: number | null;
+    xramo?: string | null;
+    cplan: string | null;
+    xplan: string | null;
+    cproducto?: string | null;
+    ifrecuencia: string | null;
+    xfrecuencia?: string | null;
+    fdesde: string | null;
+    fhasta: string | null;
+    estado?: string | null;
+  };
+  tomador: RenovacionPersonaApi | null;
+  titular: RenovacionPersonaApi | null;
+  asegurados: Array<{
+    cci_rif: string | null;
+    cid: string | null;
+    xnombre: string | null;
+    xapellido: string | null;
+    cparentesco: string | null;
+    isexo: string | null;
+    iestado_civil: string | null;
+    fnacimiento: string | null;
+  }>;
+  beneficiarios: Array<{
+    cci_rif: string | null;
+    cid: string | null;
+    xnombre: string | null;
+    xapellido: string | null;
+    cparentesco: string | null;
+    pporcentaje: number | null;
+  }>;
+  vehiculo: {
+    xplaca: string | null;
+    cmarca: string | null;
+    xmarca: string | null;
+    cmodelo: string | null;
+    xmodelo: string | null;
+    cversion: string | null;
+    xversion: string | null;
+    cano: number | null;
+    cuso: string | null;
+    xcolor: string | null;
+    xsercar: string | null;
+    xsermot: string | null;
+  } | null;
+  fdesde_sugerida: string | null;
+  fhasta_sugerida: string | null;
+  continuidad: boolean;
+  plan_actual: (RenovacionPlanApi & { activo?: boolean; disponible_en_canal?: boolean }) | null;
+  otros_planes: RenovacionPlanApi[];
+  advertencias: string[];
+}
+
+/** Datos para renovar (solo lectura). Lanza Error con el mensaje del server si falla. */
+export async function fetchRenovacion(cnpoliza: string): Promise<RenovacionApiData> {
+  try {
+    const { data } = await api.get<{ success: boolean; data?: RenovacionApiData; message?: string }>(
+      `/renovacion/${encodeURIComponent(cnpoliza)}`,
+    );
+    if (!data?.success || !data.data) throw new Error(data?.message || 'No se pudo consultar la póliza.');
+    return data.data;
+  } catch (err) {
+    const axErr = err as AxiosError<{ message?: string }>;
+    const msg = axErr.response?.data?.message;
+    if (msg) throw new Error(msg);
     throw err;
   }
 }

@@ -10,6 +10,7 @@
  *   GET /api/catalogo/anios | /marcas | /modelos | /versiones | /categorias-uso | /resolver
  *   GET /api/valrep/state | /city | /list/:domain
  *   POST /api/emissions/propietary | /vehicle
+ *   GET  /api/renovacion/:cnpoliza  (precarga "Renovar", póliza nueva enlazada)
  */
 require('dotenv').config();
 const cors = require('cors');
@@ -21,6 +22,7 @@ const catalogoRoutes = require('./routes/catalogo');
 const valrepRoutes   = require('./routes/valrep');
 const emissionsRoutes = require('./routes/emissions');
 const personasRoutes = require('./routes/personas');
+const renovacionRoutes = require('./routes/renovacion');
 const nexusAuth      = require('./middleware/nexusAuth');
 const { reportExpressError } = require('./services/monitorReporter');
 
@@ -56,6 +58,7 @@ app.use('/api/catalogo', nexusAuth, catalogoRoutes);
 app.use('/api/valrep',   nexusAuth, valrepRoutes);
 app.use('/api/emissions', nexusAuth, emissionsRoutes);
 app.use('/api/personas', nexusAuth, personasRoutes);
+app.use('/api/renovacion', nexusAuth, renovacionRoutes);
 
 app.use((err, req, res, _next) => {
   console.error('[modulo-formulario] error:', err);
