@@ -327,6 +327,22 @@ export function EmissionStep() {
     });
     setTomador({ itipoDiligencia: itipo });
   }, [isRcvEmision, tomador.tipoDoc, setDiligencia, setTomador]);
+  // RCV persona jurídica: el OCR del RIF trae el estado como texto (ej. NUEVA ESPARTA);
+  // se resuelve el código del catálogo. Si no coincide, se limpia para que lo elija el usuario.
+  useEffect(() => {
+    if (!isRcvEmision || !esPJ || catalogs.loading || !catalogs.estados?.length) return;
+    if (!tomador.estado || (tomador.cestado != null && String(tomador.cestado).trim() !== '')) return;
+    const norm = (v: string) =>
+      v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
+    const objetivo = norm(String(tomador.estado));
+    const alias = objetivo === 'VARGAS' ? 'LA GUAIRA' : objetivo === 'LA GUAIRA' ? 'VARGAS' : '';
+    const found =
+      catalogs.estados.find((s) => norm(String(s.label)) === objetivo || (alias && norm(String(s.label)) === alias)) ??
+      catalogs.estados.find((s) => norm(String(s.label)).includes(objetivo) || objetivo.includes(norm(String(s.label))));
+    if (found) setTomador({ cestado: Number(found.code), estado: String(found.label) });
+    else setTomador({ estado: '' });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isRcvEmision, esPJ, catalogs.loading, catalogs.estados, tomador.estado, tomador.cestado]);
   const beneficiarioCiudades = useCiudades(beneficiario.cestado);
   const [errors, setErrors] = useState<ValidationErrors>({});
   const [lookupLoading, setLookupLoading] = useState<Record<string, boolean>>({});
@@ -354,6 +370,24 @@ export function EmissionStep() {
       setAsegurado({ tipoDoc: expected });
     }
   }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
+
+  // RCV titular distinto y persona natural (V/E): precarga su fecha de nacimiento desde el OCR
+  // (cédula del titular → licencia si está a nombre de la misma cédula). La excepción PJ (sin fecha)
+  // aplica solo a la persona con tipoDoc J; un tomador J nunca aporta la fecha del titular.
+  const licOcrFnac = licenciaOcr?.fechaNacimiento ?? '';
+  const licOcrId = String(licenciaOcr?.identificacion ?? '').replace(/\D/g, '');
+  const rcvTitularFnacAplicada = useRef<string>('');
+  useEffect(() => {
+    if (!isRcvEmision || sameInsured !== false) return;
+    if ((asegurado.fechaNac ?? '').trim()) return;
+    if (isPersonaJuridica(asegurado.tipoDoc)) return;
+    const asegId = String(asegurado.identificacion ?? '').replace(/\D/g, '');
+    const fnac = titOcrFnac || (licOcrFnac && asegId && asegId === licOcrId ? licOcrFnac : '');
+    const key = `${asegId}|${fnac}`;
+    if (!fnac || rcvTitularFnacAplicada.current === key) return;
+    rcvTitularFnacAplicada.current = key;
+    setAsegurado({ fechaNac: String(fnac).slice(0, 10) });
+  }, [isRcvEmision, sameInsured, asegurado.fechaNac, asegurado.tipoDoc, asegurado.identificacion, titOcrFnac, licOcrFnac, licOcrId, setAsegurado]);
 
   useEffect(() => {
     if (!checkFuneralFlow || sameInsured === false) return;
@@ -711,7 +745,9 @@ export function EmissionStep() {
       prefix: string,
       opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
     ) => {
-      const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+      const isJuridica = (isPatrimoniales() || isRcvEmision) && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+      // RCV persona jurídica (RIF J/G/C): nombre = razón social, sin apellido/sexo/estado civil.
+      const isJuridicaRcv = isRcvEmision && isJuridica;
 
       if (opts?.secondaryIdent) {
         const idErr = validateSecondaryPersonIdentificacion(person.identificacion, person.tipoDoc);
@@ -723,6 +759,16 @@ export function EmissionStep() {
       } else if (digs(person.identificacion) > PERSON_FIELD_LIMITS.identificacion) {
         e[`${prefix}identificacion`] = `La identificación no puede tener más de ${PERSON_FIELD_LIMITS.identificacion} dígitos`;
       }
+      // RCV: Emisión solo trata J como persona jurídica (G/C → V) y V admite máx. 8 dígitos;
+      // se frena aquí, antes del pago, lo que el servidor rechazaría al emitir.
+      if (isRcvEmision && !e[`${prefix}identificacion`]) {
+        const tipoRcv = String(person.tipoDoc ?? '').trim().toUpperCase();
+        if (tipoRcv === 'G' || tipoRcv === 'C') {
+          e[`${prefix}identificacion`] = 'Para RCV solo se admite RIF jurídico J (G y C no están habilitados)';
+        } else if (tipoRcv === 'V' && digs(person.identificacion) > PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax) {
+          e[`${prefix}identificacion`] = `La cédula venezolana tiene máximo ${PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax} dígitos (no el RIF con dígito verificador)`;
+        }
+      }
 
       if (req(person.nombre)) {
         e[`${prefix}nombre`] = 'El nombre es obligatorio';
@@ -732,7 +778,9 @@ export function EmissionStep() {
         e[`${prefix}nombre`] = `El nombre no puede superar ${PERSON_FIELD_LIMITS.nombre} caracteres`;
       }
 
-      if (req(person.apellido)) {
+      if (isJuridicaRcv) {
+        // Sin apellido: la razón social va completa en nombre.
+      } else if (req(person.apellido)) {
         e[`${prefix}apellido`] = 'El apellido es obligatorio';
       } else if (len(person.apellido) < 2) {
         e[`${prefix}apellido`] = 'El apellido debe tener al menos 2 caracteres';
@@ -762,9 +810,13 @@ export function EmissionStep() {
       }
 
       // Validación estricta de fecha solo en patrimoniales; el resto conserva la regla original.
-      const fnacErr = isPatrimoniales()
-        ? validateFecha(person.fechaNac, isJuridica)
-        : (req(person.fechaNac) ? 'La fecha de nacimiento es obligatoria' : undefined);
+      // RCV PJ: fecha de constitución opcional (OCR la precarga con la inscripción del RIF);
+      // si viene, se valida como fecha real.
+      const fnacErr = isJuridicaRcv
+        ? (req(person.fechaNac) ? undefined : validateFecha(person.fechaNac, true))
+        : isPatrimoniales()
+          ? validateFecha(person.fechaNac, isJuridica)
+          : (req(person.fechaNac) ? 'La fecha de nacimiento es obligatoria' : undefined);
       if (fnacErr) e[`${prefix}fechaNac`] = fnacErr;
 
       // SearchSelect usa cestado/cciudad; el texto estado/ciudad puede venir vacío del autofill
@@ -913,7 +965,8 @@ export function EmissionStep() {
     ciuState: any,
     opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
   ) => {
-    const isJuridica = isPatrimoniales() && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+    const isJuridica = (isPatrimoniales() || isRcvEmision) && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
+    const isJuridicaRcv = isRcvEmision && isJuridica;
 
     return (
     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
@@ -987,14 +1040,21 @@ export function EmissionStep() {
         />
       </Field>
       <div className="hidden sm:block"></div>
-      <Field anchor={`cli-${prefix}nombre`} label="Nombre *" error={errors[`${prefix}nombre`]}>
+      <Field anchor={`cli-${prefix}nombre`} label={isJuridicaRcv ? 'Razón social *' : 'Nombre *'} error={errors[`${prefix}nombre`]}>
         <Input
           value={person.nombre ?? ''}
-          onChange={(e) => setPerson({ nombre: clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre) })}
-          placeholder="Nombre"
+          onChange={(e) =>
+            setPerson({
+              nombre: isJuridicaRcv
+                ? e.target.value.replace(/[^\p{L}\p{N} .,&'()-]/gu, '').slice(0, PERSON_FIELD_LIMITS.nombre)
+                : clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre),
+            })
+          }
+          placeholder={isJuridicaRcv ? 'Razón social' : 'Nombre'}
           maxLength={PERSON_FIELD_LIMITS.nombre}
         />
       </Field>
+      {!isJuridicaRcv && (
       <Field anchor={`cli-${prefix}apellido`} label="Apellido *" error={errors[`${prefix}apellido`]}>
         <Input
           value={person.apellido ?? ''}
@@ -1003,6 +1063,7 @@ export function EmissionStep() {
           maxLength={PERSON_FIELD_LIMITS.apellido}
         />
       </Field>
+      )}
       <Field anchor={`cli-${prefix}telefono`} label="Teléfono *" error={errors[`${prefix}telefono`]} hint="11 dígitos · Digitel 0412/0422 · Movistar 0414/0424 · Movilnet 0416/0426 · fijos 02XX">
         <Input
           value={formatTelefono(person.telefono ?? '')}
@@ -1036,7 +1097,7 @@ export function EmissionStep() {
       />
       <Field
         anchor={`cli-${prefix}fechaNac`}
-        label={isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
+        label={isJuridicaRcv ? 'Fecha de Constitución' : isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
         error={errors[`${prefix}fechaNac`]}
         hint={
           isJuridica
