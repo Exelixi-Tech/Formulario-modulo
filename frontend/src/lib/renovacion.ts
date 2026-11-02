@@ -40,15 +40,29 @@ export interface RenovacionState {
 
 const CNPOLIZA_RE = /^[0-9A-Z][0-9A-Z-]{2,29}$/;
 
-/** `?renovar=<cnpoliza>` (o `?flujo=renovacion&cnpoliza=<n>`). */
+/** Misma clave que OCR (mismo origen /ocr y /formulario): sobrevive al salto SSO/Nexus aunque la URL pierda el query. */
+const RENOVAR_STORAGE_KEY = 'exelixi_renovar';
+
+function normalizar(raw: unknown): string | null {
+  const s = String(raw ?? '').trim().toUpperCase();
+  return CNPOLIZA_RE.test(s) ? s : null;
+}
+
+/**
+ * `?renovar=<cnpoliza>` (o `?flujo=renovacion&cnpoliza=<n>`); si la URL no lo trae, el que dejó OCR en
+ * sessionStorage al entrar por el link (OCR lo borra al iniciar un flujo normal).
+ */
 export function getRenovarParam(): string | null {
   if (typeof window === 'undefined') return null;
   try {
     const qs = new URLSearchParams(window.location.search);
-    const raw = qs.get('renovar')
-      || (qs.get('flujo') === 'renovacion' ? qs.get('cnpoliza') : null);
-    const s = String(raw ?? '').trim().toUpperCase();
-    return CNPOLIZA_RE.test(s) ? s : null;
+    const desdeUrl = normalizar(qs.get('renovar')
+      || (qs.get('flujo') === 'renovacion' ? qs.get('cnpoliza') : null));
+    if (desdeUrl) {
+      try { sessionStorage.setItem(RENOVAR_STORAGE_KEY, desdeUrl); } catch { /* ignore */ }
+      return desdeUrl;
+    }
+    try { return normalizar(sessionStorage.getItem(RENOVAR_STORAGE_KEY)); } catch { return null; }
   } catch {
     return null;
   }
@@ -144,6 +158,12 @@ function mapVehiculo(v: NonNullable<RenovacionApiData['vehiculo']>): Partial<Veh
   if (v.xcolor) out.color = v.xcolor;
   if (v.xsercar) out.serial = String(v.xsercar).trim().toUpperCase();
   if (v.xsermot) out.serialMotor = String(v.xsermot).trim().toUpperCase();
+  // vhcerti.cuso guarda la categoría de uso con la que se emitió (SP RCV: cuso = @ccategoria_uso).
+  const uso = Number(v.cuso);
+  if (Number.isFinite(uso) && uso > 0) out.ccategoria_uso = uso;
+  if (v.ctipo != null && Number.isFinite(Number(v.ctipo))) out.ctipo = Number(v.ctipo);
+  if (v.xversion) (out as Record<string, unknown>).xversion = v.xversion;
+  if (v.qpuestos != null) (out as Record<string, unknown>).npuestos = Number(v.qpuestos);
   return out;
 }
 
@@ -209,6 +229,15 @@ function aplicarPrecarga(data: RenovacionApiData) {
   if (esRcv && data.vehiculo) {
     store.setVehicle(mapVehiculo(data.vehiculo));
   }
+  // RCV: beneficiario preferencial y conductor habitual si la póliza los tiene.
+  if (esRcv && data.beneficiario_preferencial?.cci_rif) {
+    store.setHasBeneficiary(true);
+    store.setBeneficiario(mapProprietaryToPerson(personaToProprietary(data.beneficiario_preferencial)));
+  }
+  if (esRcv && data.conductor?.cci_rif) {
+    store.setHasDriver(true);
+    store.setConductor(mapProprietaryToPerson(personaToProprietary(data.conductor)));
+  }
 
   if (!esRcv && (data.asegurados?.length || data.beneficiarios?.length)) {
     const asegurados = (data.asegurados ?? []).map(mapAseguradoPersonas);
@@ -228,6 +257,7 @@ function aplicarPrecarga(data: RenovacionApiData) {
 export async function iniciarRenovacion(): Promise<void> {
   const cnpoliza = getRenovarParam() || getRenovacion()?.cnpoliza_rel;
   if (!cnpoliza) return;
+  console.info('[renovacion] consultando póliza', cnpoliza);
   const base: RenovacionState = {
     flujo: 'renovacion',
     cnpoliza_rel: cnpoliza,
@@ -253,6 +283,7 @@ export async function iniciarRenovacion(): Promise<void> {
       otros_planes: data.otros_planes,
       advertencias: data.advertencias ?? [],
     };
+    console.info('[renovacion]', cnpoliza, data.elegible ? 'elegible' : data.motivo);
     if (!data.elegible) {
       setRenovacion({ ...resumen, estado: 'bloqueada' });
       return;
@@ -265,6 +296,7 @@ export async function iniciarRenovacion(): Promise<void> {
     void window.__bridge?.save?.();
   } catch (err) {
     const msg = err instanceof Error && err.message ? err.message : 'No se pudo consultar la póliza.';
+    console.warn('[renovacion] error', cnpoliza, msg);
     setRenovacion({ ...base, estado: 'error', mensaje: msg });
   }
 }

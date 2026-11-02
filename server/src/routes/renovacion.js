@@ -20,6 +20,7 @@ router.get('/:cnpoliza', async (req, res) => {
   }
   try {
     const data = aplicarPermisoVentana(await getRenovacion(cnpoliza));
+    console.log(`[renovacion] ${cnpoliza} elegible=${data.elegible} motivo=${data.motivo} tipo=${data.tipo} tomador=${data.tomador ? 'si' : 'no'} vehiculo=${data.vehiculo ? 'si' : 'no'}`);
     return res.json({ success: true, data: respuestaCliente(data) });
   } catch (err) {
     const msg = err instanceof Error ? err.message : String(err);

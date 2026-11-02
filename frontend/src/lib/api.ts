@@ -830,6 +830,10 @@ export interface RenovacionApiData {
   };
   tomador: RenovacionPersonaApi | null;
   titular: RenovacionPersonaApi | null;
+  /** RCV: beneficiario preferencial de la póliza (adpoliza.cbeneficiario). */
+  beneficiario_preferencial?: RenovacionPersonaApi | null;
+  /** RCV: conductor habitual (vhcerti.xconductor). */
+  conductor?: RenovacionPersonaApi | null;
   asegurados: Array<{
     cci_rif: string | null;
     cid: string | null;
@@ -858,6 +862,9 @@ export interface RenovacionApiData {
     xversion: string | null;
     cano: number | null;
     cuso: string | null;
+    /** Tipo INMA (VInma.ctipo): lo usan los planes RCV. */
+    ctipo?: number | null;
+    qpuestos?: number | null;
     xcolor: string | null;
     xsercar: string | null;
     xsermot: string | null;
