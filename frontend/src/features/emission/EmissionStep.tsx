@@ -759,6 +759,16 @@ export function EmissionStep() {
       } else if (digs(person.identificacion) > PERSON_FIELD_LIMITS.identificacion) {
         e[`${prefix}identificacion`] = `La identificación no puede tener más de ${PERSON_FIELD_LIMITS.identificacion} dígitos`;
       }
+      // RCV: Emisión solo trata J como persona jurídica (G/C → V) y V admite máx. 8 dígitos;
+      // se frena aquí, antes del pago, lo que el servidor rechazaría al emitir.
+      if (isRcvEmision && !e[`${prefix}identificacion`]) {
+        const tipoRcv = String(person.tipoDoc ?? '').trim().toUpperCase();
+        if (tipoRcv === 'G' || tipoRcv === 'C') {
+          e[`${prefix}identificacion`] = 'Para RCV solo se admite RIF jurídico J (G y C no están habilitados)';
+        } else if (tipoRcv === 'V' && digs(person.identificacion) > PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax) {
+          e[`${prefix}identificacion`] = `La cédula venezolana tiene máximo ${PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax} dígitos (no el RIF con dígito verificador)`;
+        }
+      }
 
       if (req(person.nombre)) {
         e[`${prefix}nombre`] = 'El nombre es obligatorio';
