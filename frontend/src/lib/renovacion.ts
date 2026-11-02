@@ -72,8 +72,33 @@ export function useRenovacionBloqueaIdentidad(): boolean {
   return Boolean(r?.precargada);
 }
 
+/**
+ * Guarda `renovacion` en el store (viaja en la sesión del flujo) y una copia compacta en
+ * `metadataCanal.renovacion`: Pagos arma el state de emisión con campos fijos y sí reenvía
+ * metadataCanal, así Emisión recibe cnpoliza_rel/fdesde al emitir sin tocar Pagos.
+ */
 function setRenovacion(next: RenovacionState | null) {
-  useWizardStore.setState({ renovacion: next } as never);
+  const store = useWizardStore.getState();
+  const meta = { ...((store.metadataCanal as Record<string, unknown> | null) ?? {}) };
+  if (next) {
+    meta.renovacion = {
+      flujo: next.flujo,
+      cnpoliza_rel: next.cnpoliza_rel,
+      itipoEmi: next.itipoEmi,
+      estado: next.estado,
+      precargada: Boolean(next.precargada),
+      fdesde_sugerida: next.fdesde_sugerida ?? null,
+      fhasta_sugerida: next.fhasta_sugerida ?? null,
+      fhasta_anterior: next.fhasta_anterior ?? null,
+      xplan_anterior: next.xplan_anterior ?? null,
+      plan_actual: next.plan_actual
+        ? { cplan: next.plan_actual.cplan, xplan: next.plan_actual.xplan, activo: next.plan_actual.activo }
+        : null,
+    };
+  } else {
+    delete meta.renovacion;
+  }
+  useWizardStore.setState({ renovacion: next, metadataCanal: meta } as never);
 }
 
 /** ¿Hay que consultar y precargar? (URL nueva o sesión del flujo que viene de OCR sin precarga). */
