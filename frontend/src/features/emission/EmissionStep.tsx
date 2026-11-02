@@ -345,6 +345,7 @@ export function EmissionStep() {
   // RCV titular distinto y persona natural (V/E): precarga su fecha de nacimiento desde el OCR
   // (cédula del titular → licencia si está a nombre de la misma cédula). La excepción PJ (sin fecha)
   // aplica solo a la persona con tipoDoc J; un tomador J nunca aporta la fecha del titular.
+  const licenciaOcr = useWizardStore((s) => s.documents.licencia?.ocr);
   const licOcrFnac = licenciaOcr?.fechaNacimiento ?? '';
   const licOcrId = String(licenciaOcr?.identificacion ?? '').replace(/\D/g, '');
   const rcvTitularFnacAplicada = useRef<string>('');
