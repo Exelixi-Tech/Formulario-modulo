@@ -6,6 +6,23 @@ function normalizeIdentificacionDigits(raw?: string | null): string {
   return String(raw ?? '').replace(/\D/g, '');
 }
 
+const TIPOS_PERSONA_JURIDICA = new Set(['J', 'G', 'C']);
+
+/**
+ * Misma persona aunque un documento traiga la cédula y otro el RIF personal: el carnet INTT suele mostrar
+ * V-19529692-0 (cédula + dígito verificador, a veces con un cero adelante: V-01234567-8). Con RIF de persona
+ * jurídica (J/G/C) solo cuenta la coincidencia exacta.
+ */
+export function mismaIdentificacion(a: string, b: string, tipoDocB?: string | null): boolean {
+  const x = a.replace(/^0+/, '');
+  const y = b.replace(/^0+/, '');
+  if (!x || !y) return false;
+  if (x === y) return true;
+  if (TIPOS_PERSONA_JURIDICA.has(String(tipoDocB ?? '').toUpperCase())) return false;
+  const [corta, larga] = x.length < y.length ? [x, y] : [y, x];
+  return larga.length === corta.length + 1 && larga.startsWith(corta);
+}
+
 function inferTipoDocFromRaw(raw?: string | null): string | null {
   const m = String(raw ?? '').trim().toUpperCase().match(/^([VEJGP])[-\s.]*\d/);
   if (!m) return null;
@@ -69,14 +86,15 @@ export function resolveOcrPersonRoles(
   let sameInsured = true;
   let asegurado: Partial<PersonData> | undefined;
 
-  const hayDiscrepanciaCarnet = !!cedulaId && !!carnetId && cedulaId !== carnetId;
+  const carnetTipoDoc = certificado ? resolveOwnerTipoDoc(certificado) : null;
+  const hayDiscrepanciaCarnet = !!cedulaId && !!carnetId && !mismaIdentificacion(cedulaId, carnetId, carnetTipoDoc);
   if (hayDiscrepanciaCarnet && certificado) {
     const titularCarnet = extractTomadorFromCertificado(certificado);
     sameInsured = false;
     asegurado = {
       identificacion: titularCarnet?.identificacion ?? carnetId,
       tipoDoc:
-        resolveOwnerTipoDoc(certificado)
+        carnetTipoDoc
         ?? titularCarnet?.tipoDoc
         ?? inferTipoDocFromRaw(certificado.identificacion ?? certificado.propietarioIdentificacion)
         ?? 'V',
@@ -96,8 +114,8 @@ export function resolveOcrPersonRoles(
 
   const idDistinta =
     !!licenciaId
-    && (!cedulaId || licenciaId !== cedulaId)
-    && (!carnetId || licenciaId !== carnetId);
+    && (!cedulaId || !mismaIdentificacion(licenciaId, cedulaId))
+    && (!carnetId || !mismaIdentificacion(licenciaId, carnetId, carnetTipoDoc));
 
   const nombreDistinto =
     !licenciaId
