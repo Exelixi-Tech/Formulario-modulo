@@ -1483,6 +1483,7 @@ export function VehicleStep() {
                 <IdentityInput
                   tipoDoc={conductor.tipoDoc ?? 'V'}
                   identificacion={conductor.identificacion}
+                  readOnly={renovacionLock && Boolean(conductor.identificacion)}
                   maxLength={secondaryIdentificacionMax(conductor.tipoDoc)}
                   loading={conductorLookupLoading}
                   onTipoDocChange={(v) => {

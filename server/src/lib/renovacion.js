@@ -55,6 +55,8 @@ function respuestaCliente(data) {
     },
     tomador: data.tomador ?? null,
     titular: data.titular ?? null,
+    beneficiario_preferencial: data.beneficiario_preferencial ?? null,
+    conductor: data.conductor ?? null,
     asegurados: Array.isArray(data.asegurados) ? data.asegurados : [],
     beneficiarios: Array.isArray(data.beneficiarios) ? data.beneficiarios : [],
     vehiculo: data.vehiculo ?? null,

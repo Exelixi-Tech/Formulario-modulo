@@ -930,7 +930,7 @@ export function EmissionStep() {
               : PERSON_FIELD_LIMITS.identificacion
           }
           loading={Boolean(lookupLoading[prefix])}
-          readOnly={identidadRenovacion && (prefix === 'tom_' || prefix === 'aseg_')}
+          readOnly={identidadRenovacion && Boolean(person.identificacion) && (prefix === 'tom_' || prefix === 'aseg_' || prefix === 'benef_')}
           onTipoDocChange={(v) => {
             lastLookupCid.current[prefix] = '';
             setPerson({ tipoDoc: v });
