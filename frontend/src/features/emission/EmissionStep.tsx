@@ -306,7 +306,7 @@ export function EmissionStep() {
     if (!isRcvEmision || !esPJ || catalogs.loading || !catalogs.estados?.length) return;
     if (!tomador.estado || (tomador.cestado != null && String(tomador.cestado).trim() !== '')) return;
     const norm = (v: string) =>
-      v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/s+/g, ' ').trim();
+      v.normalize('NFD').replace(/[̀-ͯ]/g, '').toUpperCase().replace(/[^A-Z ]/g, ' ').replace(/\s+/g, ' ').trim();
     const objetivo = norm(String(tomador.estado));
     const alias = objetivo === 'VARGAS' ? 'LA GUAIRA' : objetivo === 'LA GUAIRA' ? 'VARGAS' : '';
     const found =
@@ -950,7 +950,7 @@ export function EmissionStep() {
           onChange={(e) =>
             setPerson({
               nombre: isJuridicaRcv
-                ? e.target.value.replace(/[^p{L}p{N} .,&'()-]/gu, '').slice(0, PERSON_FIELD_LIMITS.nombre)
+                ? e.target.value.replace(/[^\p{L}\p{N} .,&'()-]/gu, '').slice(0, PERSON_FIELD_LIMITS.nombre)
                 : clipLetters(e.target.value, PERSON_FIELD_LIMITS.nombre),
             })
           }
