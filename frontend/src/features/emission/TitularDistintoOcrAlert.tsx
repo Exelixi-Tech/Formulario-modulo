@@ -3,15 +3,21 @@ import { AlertTriangle, ArrowDown } from 'lucide-react';
 export const TITULAR_SECTION_ANCHOR = 'cli-titular';
 
 type TitularDistintoOcrAlertProps = {
-  /** Cédula del propietario que leyó el OCR en el carnet de circulación. */
+  /** Cédula o RIF del propietario que leyó el OCR en el carnet de circulación. */
   carnetIdentificacion?: string;
+  /** Tipo de documento del propietario: J = empresa (RIF). */
+  carnetTipoDoc?: string;
 };
 
 /**
  * RCV: el OCR encontró el carnet a nombre de otra persona y activó «titular distinto».
  * Se avisa arriba del paso porque la sección del titular queda fuera de la vista.
  */
-export function TitularDistintoOcrAlert({ carnetIdentificacion }: TitularDistintoOcrAlertProps) {
+export function TitularDistintoOcrAlert({ carnetIdentificacion, carnetTipoDoc }: TitularDistintoOcrAlertProps) {
+  const esEmpresa = String(carnetTipoDoc ?? '').toUpperCase() === 'J';
+  const documento = carnetIdentificacion
+    ? esEmpresa ? ` (RIF J-${carnetIdentificacion})` : ` (cédula ${carnetIdentificacion})`
+    : '';
   const irATitular = () => {
     document.getElementById(TITULAR_SECTION_ANCHOR)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
   };
@@ -24,12 +30,12 @@ export function TitularDistintoOcrAlert({ carnetIdentificacion }: TitularDistint
       <AlertTriangle size={18} className="shrink-0 text-amber-600 hidden sm:block" />
       <div className="min-w-0 flex-1">
         <p className="font-semibold">
-          El carnet de circulación está a nombre de otra persona
-          {carnetIdentificacion ? ` (cédula ${carnetIdentificacion})` : ''}.
+          El carnet de circulación está a nombre de {esEmpresa ? 'una empresa' : 'otra persona'}{documento}.
         </p>
         <p className="mt-0.5 text-amber-800">
-          Por eso se activó «la persona que pagará es diferente a la asegurada». Revisa los datos del titular; si es el
-          mismo tomador, apaga esa opción.
+          {esEmpresa
+            ? 'La empresa queda como titular asegurada y el tomador es quien paga. Revisa los datos del titular.'
+            : 'Por eso se activó «la persona que pagará es diferente a la asegurada». Revisa los datos del titular; si es el mismo tomador, apaga esa opción.'}
         </p>
       </div>
       <button

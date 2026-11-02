@@ -1108,7 +1108,10 @@ export function EmissionStep() {
     <div className="animate-fade-in">
       <div className="space-y-5">
         {titularDistintoPorCarnet && (
-          <TitularDistintoOcrAlert carnetIdentificacion={ocrRoles.asegurado?.identificacion} />
+          <TitularDistintoOcrAlert
+            carnetIdentificacion={ocrRoles.asegurado?.identificacion}
+            carnetTipoDoc={ocrRoles.asegurado?.tipoDoc}
+          />
         )}
 
         {/* Tomador (Base) */}
