@@ -22,6 +22,7 @@ import {
   markTarjetaPublicSession,
 } from './lib/rcv-tarjeta-flow'
 import { applyWizardStepFromUrl } from './lib/wizard-step'
+import { debeIniciarRenovacion, iniciarRenovacion } from './lib/renovacion'
 
 // Identidad Exélixi (colores + favicon) solo si el flujo activo es el catálogo.
 applyExelixiBranding('Formulario');
@@ -66,6 +67,12 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
         setHasDriver,
         setConductor,
       } = useWizardStore.getState();
+
+      // Renovar (póliza nueva enlazada): precarga desde la póliza y salta OCR. Sin `renovar` no aplica.
+      if (debeIniciarRenovacion()) {
+        void iniciarRenovacion();
+        return;
+      }
 
       if (isCotizadorFlow() && isRcv()) {
         setOcrDone(true);

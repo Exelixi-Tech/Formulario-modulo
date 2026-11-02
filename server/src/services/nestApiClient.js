@@ -415,7 +415,28 @@ async function getPlanesPersonas(cramo = 9, canal = {}) {
   return resBody.data?.planes ?? resBody.planes ?? [];
 }
 
+/**
+ * Renovación (póliza nueva enlazada): nest-api GET /renovacion/:cnpoliza (scope renovacion:read).
+ * Solo lectura. Devuelve `data` tal cual (tomador, titular, asegurados, beneficiarios, vehiculo, elegible…).
+ * @param {string} cnpoliza
+ * @returns {Promise<Record<string, unknown>>}
+ */
+async function getRenovacion(cnpoliza) {
+  const url = `${getBaseUrl()}/api/v1/renovacion/${encodeURIComponent(String(cnpoliza).trim())}`;
+  const response = await axios.get(url, await axiosOpts({ validateStatus: () => true }));
+  const body = response.data ?? {};
+  if (response.status >= 400 || body.status === false || !body.data) {
+    const raw = body?.message;
+    const err = new Error((Array.isArray(raw) ? raw.join('; ') : raw) || `HTTP ${response.status} renovacion`);
+    err.status = response.status >= 400 ? response.status : 502;
+    err.code = body?.code || 'RENOVACION_ERROR';
+    throw err;
+  }
+  return body.data;
+}
+
 module.exports = {
+  getRenovacion,
   getBaseUrl,
   getTimeout,
   validateEmissionAutoViaNestApi,

@@ -5,6 +5,7 @@ import { TopProgressBar } from './components/TopProgressBar';
 import { AuroraBackground } from './components/AuroraBackground';
 import { Toaster } from './components/Toaster';
 import { WelcomeSplash } from './components/WelcomeSplash';
+import { RenovacionAviso } from './components/RenovacionAviso';
 import { Button } from './components/ui/Button';
 import { EmissionStep } from './features/emission/EmissionStep';
 import { VehicleStep } from './features/vehicle/VehicleStep';
@@ -232,6 +233,7 @@ export default function App() {
         <main className="flex-1 min-h-screen pt-[72px] lg:pt-10 px-4 sm:px-6 lg:px-10 pb-[calc(7.5rem+env(safe-area-inset-bottom))] lg:pb-12">
           <div className="max-w-5xl mx-auto">
             {!hideStepper && <TopStepper />}
+            <RenovacionAviso />
 
             <header className="mb-8 animate-fade-in">
               <div className="flex items-start justify-between gap-4 flex-wrap">
