@@ -278,15 +278,19 @@ export function applyExelixiOcrHandoff(
   }
 
   const cedula = handoff.ocrData.cedula;
-  if (cedula?.nombre || cedula?.identificacion) {
+  if (cedula?.nombre || cedula?.razonSocial || cedula?.identificacion) {
+    // RIF jurídico (J/G/C): nombre = razón social, sin apellido; dirección y estado del domicilio fiscal.
+    const esPJ = ['J', 'G', 'C'].includes(String(cedula.tipoDoc ?? '').toUpperCase());
     setters.setTomador({
-      nombre: cedula.nombre ?? '',
-      apellido: cedula.apellido ?? '',
+      nombre: cedula.nombre ?? cedula.razonSocial ?? '',
+      apellido: esPJ ? '' : (cedula.apellido ?? ''),
       identificacion: cedula.identificacion ?? '',
       tipoDoc: cedula.tipoDoc ?? 'V',
-      fechaNac: cedula.fechaNacimiento ?? '',
-      sexo: cedula.sexo ?? '',
-      estadoCivil: cedula.estadoCivil ?? '',
+      fechaNac: cedula.fechaNacimiento ?? (esPJ ? (cedula.fechaInscripcion ?? '') : ''),
+      sexo: esPJ ? '' : (cedula.sexo ?? ''),
+      estadoCivil: esPJ ? '' : (cedula.estadoCivil ?? ''),
+      ...(esPJ && cedula.direccionFiscal ? { direccion: cedula.direccionFiscal } : {}),
+      ...(esPJ && cedula.estadoFiscal ? { estado: cedula.estadoFiscal } : {}),
     });
   }
 
