@@ -371,6 +371,24 @@ export function EmissionStep() {
     }
   }, [isRcvEmision, sameInsured, certOcr, asegurado.tipoDoc, setAsegurado]);
 
+  // RCV titular distinto y persona natural (V/E): precarga su fecha de nacimiento desde el OCR
+  // (cédula del titular → licencia si está a nombre de la misma cédula). La excepción PJ (sin fecha)
+  // aplica solo a la persona con tipoDoc J; un tomador J nunca aporta la fecha del titular.
+  const licOcrFnac = licenciaOcr?.fechaNacimiento ?? '';
+  const licOcrId = String(licenciaOcr?.identificacion ?? '').replace(/\D/g, '');
+  const rcvTitularFnacAplicada = useRef<string>('');
+  useEffect(() => {
+    if (!isRcvEmision || sameInsured !== false) return;
+    if ((asegurado.fechaNac ?? '').trim()) return;
+    if (isPersonaJuridica(asegurado.tipoDoc)) return;
+    const asegId = String(asegurado.identificacion ?? '').replace(/\D/g, '');
+    const fnac = titOcrFnac || (licOcrFnac && asegId && asegId === licOcrId ? licOcrFnac : '');
+    const key = `${asegId}|${fnac}`;
+    if (!fnac || rcvTitularFnacAplicada.current === key) return;
+    rcvTitularFnacAplicada.current = key;
+    setAsegurado({ fechaNac: String(fnac).slice(0, 10) });
+  }, [isRcvEmision, sameInsured, asegurado.fechaNac, asegurado.tipoDoc, asegurado.identificacion, titOcrFnac, licOcrFnac, licOcrId, setAsegurado]);
+
   useEffect(() => {
     if (!checkFuneralFlow || sameInsured === false) return;
     setAsegurado({
