@@ -26,7 +26,8 @@ export function splitColombianOwnerName(full: string): { nombre: string; apellid
 export function mapVenezuelanOwnerDocType(raw?: string | null): string | null {
   const u = String(raw ?? '').toUpperCase().replace(/[\s.\-]/g, '').trim();
   if (!u) return null;
-  if (u === 'J' || u.includes('NIT')) return 'J';
+  // G (gobierno) se trata como J, igual que inferTipoDocFromIdent: RIF jurídico de 9 dígitos, no cédula.
+  if (u === 'J' || u === 'G' || u.includes('NIT')) return 'J';
   if (u === 'E' || u === 'CE' || u === 'EXTRANJ' || u === 'EXTRANJERO') return 'E';
   if (u === 'P' || u === 'PASAPORTE') return 'P';
   return 'V';
