@@ -1,5 +1,6 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useRef } from 'react';
 import { useWizardStore } from '../../store/wizardStore';
+import { useRenovacionBloqueaIdentidad } from '../../lib/renovacion';
 import { Field, Input, Select, Textarea } from '../../components/ui/FormField';
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch';
 import { SectionCard } from '../emission/EmissionStep';
@@ -223,6 +224,11 @@ export function VehicleStep() {
   const rcvLaMundial = isRcvLaMundialFlow();
   const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = rcvLaMundial && !cotizadorRcv;
+  /**
+   * Renovación: placa/serial vienen de la póliza que se renueva (cnpoliza_rel) y no se editan.
+   * No se consulta "placa vigente" aquí (la vigente es justamente esa póliza); el SP valida al emitir.
+   */
+  const renovacionLock = useRenovacionBloqueaIdentidad();
   const conductorCiudades = useCiudades(conductor.cestado);
   const isBinacional = rcvLaMundial && vehicle.tipoPlaca === 'binacional';
   const showToneladas = rcvLaMundial && isCategoriaToneladas(vehicle.ccategoria_uso);
@@ -345,7 +351,7 @@ export function VehicleStep() {
   const hasOcrCodes = !!(vehicle.cmarca && vehicle.cmodelo);
   /** QA: placa/serial editables para pruebas; no auto-bloquear INMA. */
   const qaOcrLock = isQaDeploy() && hasOcr;
-  const qaIdentLock = false;
+  const qaIdentLock = renovacionLock;
   /** Solo se bloquean año/marca/modelo si el usuario confirma (nunca en QA). */
   const inmaBasicsLocked = !isQaDeploy() && verified;
   const versionLocked = false;
@@ -578,7 +584,7 @@ export function VehicleStep() {
 
   // ── Validación remota de placa (fn_validar_placa vía nest-api) ────────────
   const validatePlacaRemote = useCallback(async (rawPlaca: string) => {
-    if (!isRcvEmision) return;
+    if (!isRcvEmision || renovacionLock) return;
 
     const placa = String(rawPlaca || '').trim().toUpperCase();
     if (placa.length < 6) return;
@@ -613,11 +619,11 @@ export function VehicleStep() {
     } finally {
       setPlacaValidating(false);
     }
-  }, [isRcvEmision]);
+  }, [isRcvEmision, renovacionLock]);
 
   // ── Validación remota de serial (fn_validar_serialCar vía nest-api) ───────
   const validateSerialRemote = useCallback(async (rawSerial: string) => {
-    if (!isRcvEmision) return;
+    if (!isRcvEmision || renovacionLock) return;
 
     const serial = String(rawSerial || '').trim().toUpperCase();
     if (!serial) return;
@@ -652,7 +658,7 @@ export function VehicleStep() {
     } finally {
       setSerialValidating(false);
     }
-  }, [isRcvEmision]);
+  }, [isRcvEmision, renovacionLock]);
 
   // ── Autocompletar conductor por cédula (mismo flujo que EmissionStep) ────
   const lookupConductorByCedula = useCallback(
@@ -849,8 +855,8 @@ export function VehicleStep() {
       return false;
     }
 
-    // Validación remota La Mundial — solo emisión RCV completa
-    if (isRcvEmision) {
+    // Validación remota La Mundial — solo emisión RCV completa (no en renovación, ver renovacionLock)
+    if (isRcvEmision && !renovacionLock) {
       try {
         const { validateVehicle } = await import('../../lib/api');
         toast.info('Validando vehículo', 'Verificando placa y serial...', 2000);

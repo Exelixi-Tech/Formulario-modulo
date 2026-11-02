@@ -23,6 +23,7 @@ import {
   preClasificarDiligencia,
 } from '../../lib/diligencia';
 import { searchProprietary } from '../../lib/api';
+import { useRenovacionBloqueaIdentidad } from '../../lib/renovacion';
 import {
   buildProprietaryCid,
   mapProprietaryToPerson,
@@ -245,6 +246,8 @@ function clipLetters(v: string, max: number): string {
 }
 
 export function EmissionStep() {
+  /** Renovación: cédula de tomador/titular viene de la póliza (solo lectura). */
+  const identidadRenovacion = useRenovacionBloqueaIdentidad();
   const {
     tomador, setTomador,
     sameInsured, setSameInsured,
@@ -952,6 +955,7 @@ export function EmissionStep() {
               : PERSON_FIELD_LIMITS.identificacion
           }
           loading={Boolean(lookupLoading[prefix])}
+          readOnly={identidadRenovacion && (prefix === 'tom_' || prefix === 'aseg_')}
           onTipoDocChange={(v) => {
             lastLookupCid.current[prefix] = '';
             setPerson({ tipoDoc: v });

@@ -15,6 +15,7 @@ import { isFunerario, isRcv, usesFuneralStep } from './lib/product'
 import { applyMetadataFromNexusToken, getNexusTokenFromUrl } from './lib/nexus-token-client'
 import { mergeMarketplaceActorMetadata, rememberMarketplaceActorFromToken } from './lib/sso-metadata'
 import { hydrateTarjetaMetadataCanal, isTarjetaRcvFlow, markTarjetaPublicSession } from './lib/rcv-tarjeta-flow'
+import { debeIniciarRenovacion, iniciarRenovacion } from './lib/renovacion'
 
 // Identidad Exélixi (colores + favicon) solo si el flujo activo es el catálogo.
 applyExelixiBranding('Formulario');
@@ -50,6 +51,12 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
         setHasDriver,
         setConductor,
       } = useWizardStore.getState();
+
+      // Renovar (póliza nueva enlazada): precarga desde la póliza y salta OCR. Sin `renovar` no aplica.
+      if (debeIniciarRenovacion()) {
+        void iniciarRenovacion();
+        return;
+      }
 
       if (isCotizadorFlow() && isRcv()) {
         setOcrDone(true);

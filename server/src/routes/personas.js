@@ -3,6 +3,7 @@
  */
 const express = require('express');
 const { checkPolizaVigentePersonas, getPlanesPersonas } = require('../services/nestApiClient');
+const { esLaPolizaQueSeRenueva } = require('../lib/renovacion');
 
 const router = express.Router();
 
@@ -100,9 +101,15 @@ router.post('/poliza-vigente', async (req, res) => {
   }
 
   try {
+    // Renovación: la póliza que se renueva (cnpoliza_rel) no bloquea; la nueva arranca en su fhasta.
+    const cnpolizaRel = req.body?.cnpoliza_rel;
     let result = { hasVigente: false };
     for (const ramo of await ramosPolizaVigente(req, cramo)) {
       result = await checkPolizaVigentePersonas({ rif, cramo: ramo });
+      if (result.hasVigente && cnpolizaRel && esLaPolizaQueSeRenueva(result.cnpoliza, cnpolizaRel)) {
+        result = { hasVigente: false };
+        continue;
+      }
       if (result.hasVigente) break;
     }
     if (result.hasVigente) {

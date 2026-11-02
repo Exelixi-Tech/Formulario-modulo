@@ -31,6 +31,8 @@ interface IdentityInputProps {
   loading?: boolean;
   /** Máximo de caracteres del número (default: límite Sis2000 cci_rif = 13). */
   maxLength?: number;
+  /** Solo lectura (p. ej. renovación: la cédula viene de la póliza). */
+  readOnly?: boolean;
 }
 
 export function IdentityInput({
@@ -43,6 +45,7 @@ export function IdentityInput({
   inputId,
   loading = false,
   maxLength = PERSON_FIELD_LIMITS.identificacion,
+  readOnly = false,
 }: IdentityInputProps) {
   return (
     <div
@@ -58,7 +61,7 @@ export function IdentityInput({
           aria-label="Tipo de documento"
           value={tipoDoc || 'V'}
           onChange={(e) => onTipoDocChange(e.target.value)}
-          disabled={loading}
+          disabled={loading || readOnly}
           className={
             'h-full appearance-none cursor-pointer bg-slate-50/70 ' +
             'pl-3.5 pr-8 py-2.5 ' +
@@ -87,7 +90,7 @@ export function IdentityInput({
         inputMode={['V', 'E', 'J'].includes(tipoDoc) ? 'numeric' : 'text'}
         maxLength={maxLength}
         value={identificacion}
-        disabled={loading}
+        disabled={loading || readOnly}
         onChange={(e) => {
           let val = e.target.value;
           if (['V', 'E', 'J'].includes(tipoDoc)) {
