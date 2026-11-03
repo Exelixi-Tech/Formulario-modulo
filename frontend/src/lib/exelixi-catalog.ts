@@ -14,6 +14,20 @@ import { toDiligenciaDocTypes, type DiligenciaDocType } from './diligencia';
 import type { PersonData } from '../types';
 import { persistTarjetaMetadataCanal, resolveTipoPlacaForTarjetaFlow } from './rcv-tarjeta-flow';
 import { useWizardStore } from '../store/wizardStore';
+import { PERSON_FIELD_LIMITS } from './field-limits';
+
+/**
+ * Domicilio fiscal del RIF → campo Dirección (xavecalle CHAR(60)): corta en el último
+ * espacio antes del límite para no partir palabras. Sigue siendo editable.
+ */
+export function direccionFiscalParaForm(dir?: string | null): string {
+  const limpio = String(dir ?? '').replace(/\s+/g, ' ').trim();
+  const max = PERSON_FIELD_LIMITS.direccion;
+  if (limpio.length <= max) return limpio;
+  const corte = limpio.slice(0, max + 1);
+  const espacio = corte.lastIndexOf(' ');
+  return (espacio > 0 ? corte.slice(0, espacio) : limpio.slice(0, max)).replace(/[\s.,;-]+$/, '');
+}
 
 export type BuilderProductBranch =
   | 'AUTOMOVIL'
@@ -289,7 +303,7 @@ export function applyExelixiOcrHandoff(
       fechaNac: cedula.fechaNacimiento ?? (esPJ ? (cedula.fechaInscripcion ?? '') : ''),
       sexo: esPJ ? '' : (cedula.sexo ?? ''),
       estadoCivil: esPJ ? '' : (cedula.estadoCivil ?? ''),
-      ...(esPJ && cedula.direccionFiscal ? { direccion: cedula.direccionFiscal } : {}),
+      ...(esPJ && cedula.direccionFiscal ? { direccion: direccionFiscalParaForm(cedula.direccionFiscal) } : {}),
       ...(esPJ && cedula.estadoFiscal ? { estado: cedula.estadoFiscal } : {}),
     });
   }
