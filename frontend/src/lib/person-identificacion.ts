@@ -44,8 +44,28 @@ export function isRifJuridico(tipoDoc?: string): boolean {
   return isRifJuridicoTipoDoc(tipoDoc);
 }
 
-/** Validación del número de pasaporte; undefined si no es P o si es emitible en Sis2000. */
-export function validatePasaporte(identificacion?: string, tipoDoc?: string): string | undefined {
+/**
+ * Pasaporte alfanumérico en titular/tomador de personas: Sis2000 guarda el pasaporte completo en
+ * maclient.cid ('P-EM2849387') y solo los dígitos en cci_rif (2849387), como SysIP.
+ * Límites: 13 caracteres (cid de 15 con 'P-') y entre 5 y 9 dígitos (numeric(9) del SP).
+ */
+export const PASAPORTE_ALFA_MAX_LENGTH = 13;
+export const PASAPORTE_ALFA_DIGITS_MIN = 5;
+export const PASAPORTE_ALFA_DIGITS_MAX = 9;
+
+export const PASAPORTE_ALFA_FORMATO_MSG =
+  `El pasaporte con letras debe tener máximo ${PASAPORTE_ALFA_MAX_LENGTH} letras o números y entre ${PASAPORTE_ALFA_DIGITS_MIN} y ${PASAPORTE_ALFA_DIGITS_MAX} dígitos`;
+
+/**
+ * Validación del número de pasaporte; undefined si no es P o si es emitible en Sis2000.
+ * permitirAlfanumerico: solo titular y tomador de personas (RCV, asegurados adicionales y
+ * beneficiarios siguen exigiendo pasaporte numérico).
+ */
+export function validatePasaporte(
+  identificacion?: string,
+  tipoDoc?: string,
+  opts?: { permitirAlfanumerico?: boolean },
+): string | undefined {
   if (!isPasaporteTipoDoc(tipoDoc)) return undefined;
   const v = String(identificacion ?? '').trim().toUpperCase();
   if (!v) return 'La identificación es obligatoria';
@@ -53,7 +73,18 @@ export function validatePasaporte(identificacion?: string, tipoDoc?: string): st
   if (v.length < PASAPORTE_MIN_LENGTH || v.length > PASAPORTE_MAX_LENGTH) {
     return `El pasaporte debe tener entre ${PASAPORTE_MIN_LENGTH} y ${PASAPORTE_MAX_LENGTH} caracteres`;
   }
-  if (/[A-Z]/.test(v)) return PASAPORTE_ALFANUMERICO_MSG;
+  if (/[A-Z]/.test(v)) {
+    if (!opts?.permitirAlfanumerico) return PASAPORTE_ALFANUMERICO_MSG;
+    const digits = countIdentificacionDigits(v);
+    if (
+      v.length > PASAPORTE_ALFA_MAX_LENGTH ||
+      digits < PASAPORTE_ALFA_DIGITS_MIN ||
+      digits > PASAPORTE_ALFA_DIGITS_MAX
+    ) {
+      return PASAPORTE_ALFA_FORMATO_MSG;
+    }
+    return undefined;
+  }
   if (v.length > FOREIGN_IDENTIFICACION_DIGITS_MAX) {
     return `El pasaporte numérico no puede tener más de ${FOREIGN_IDENTIFICACION_DIGITS_MAX} dígitos`;
   }
@@ -75,12 +106,16 @@ export function secondaryIdentificacionMax(tipoDoc?: string): number {
 export function validateSecondaryPersonIdentificacion(
   identificacion?: string,
   tipoDoc?: string,
-  opts?: { soloPersonaNatural?: boolean },
+  opts?: { soloPersonaNatural?: boolean; permitirPasaporteAlfanumerico?: boolean },
 ): string | undefined {
   if (opts?.soloPersonaNatural && isRifJuridicoTipoDoc(tipoDoc)) {
     return PERSONA_JURIDICA_NO_PERMITIDA_MSG;
   }
-  if (isPasaporteTipoDoc(tipoDoc)) return validatePasaporte(identificacion, tipoDoc);
+  if (isPasaporteTipoDoc(tipoDoc)) {
+    return validatePasaporte(identificacion, tipoDoc, {
+      permitirAlfanumerico: opts?.permitirPasaporteAlfanumerico,
+    });
+  }
   const digits = countIdentificacionDigits(identificacion);
   if (!String(identificacion ?? '').trim() || digits === 0) {
     return 'La identificación es obligatoria';

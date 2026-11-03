@@ -776,14 +776,21 @@ export function EmissionStep() {
       const { isJuridica, isJuridicaRcv } = juridicaDe(person.tipoDoc, prefix);
       // Personas: titular y asegurado son siempre persona natural (el RIF jurídico solo va en el tomador).
       const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_';
+      // Personas: tomador y titular admiten pasaporte con letras (cid completo + cci_rif dígitos). RCV no.
+      const permitirPasaporteAlfanumerico =
+        personasProfesionFlow && (prefix === 'tom_' || prefix === 'aseg_');
+      const pasaporteErr = validatePasaporte(person.identificacion, person.tipoDoc, {
+        permitirAlfanumerico: permitirPasaporteAlfanumerico,
+      });
 
       if (opts?.secondaryIdent) {
         const idErr = validateSecondaryPersonIdentificacion(person.identificacion, person.tipoDoc, {
           soloPersonaNatural,
+          permitirPasaporteAlfanumerico,
         });
         if (idErr) e[`${prefix}identificacion`] = idErr;
-      } else if (validatePasaporte(person.identificacion, person.tipoDoc)) {
-        e[`${prefix}identificacion`] = validatePasaporte(person.identificacion, person.tipoDoc)!;
+      } else if (pasaporteErr) {
+        e[`${prefix}identificacion`] = pasaporteErr;
       } else if (req(person.identificacion)) {
         e[`${prefix}identificacion`] = 'La identificación es obligatoria';
       } else if (digs(person.identificacion) < 1) {
