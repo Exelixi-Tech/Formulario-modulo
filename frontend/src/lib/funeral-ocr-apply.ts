@@ -18,15 +18,23 @@ function toIsoFechaNac(raw?: string | null): string {
 
 function personFromOcr(ocr?: OcrResult | null): FuneralPerson | null {
   if (!ocr) return null;
-  const identificacion = digits(ocr.identificacion);
-  if (!identificacion && !ocr.nombre && !ocr.apellido) return null;
+  const tipoDoc = String(ocr.tipoDoc || 'V').trim().toUpperCase();
+  // Pasaporte: el número es alfanumérico (ej. EM2849387); quitar letras cambiaría la identidad.
+  const identificacion =
+    tipoDoc === 'P'
+      ? String(ocr.identificacion ?? '').toUpperCase().replace(/[^A-Z0-9]/g, '')
+      : digits(ocr.identificacion);
+  // RIF jurídico (J/G/C): razón social en nombre, sin apellido ni sexo; fecha = inscripción del RIF.
+  const esPJ = ['J', 'G', 'C'].includes(tipoDoc);
+  const nombre = ocr.nombre ?? (esPJ ? ocr.razonSocial ?? '' : '');
+  if (!identificacion && !nombre && !ocr.apellido) return null;
   return {
-    tipoDoc: ocr.tipoDoc || 'V',
+    tipoDoc,
     identificacion,
-    nombre: ocr.nombre ?? '',
-    apellido: ocr.apellido ?? '',
-    fechaNac: toIsoFechaNac(ocr.fechaNacimiento),
-    sexo: ocr.sexo ?? '',
+    nombre,
+    apellido: esPJ ? '' : ocr.apellido ?? '',
+    fechaNac: toIsoFechaNac(ocr.fechaNacimiento ?? (esPJ ? ocr.fechaInscripcion : undefined)),
+    sexo: esPJ ? '' : ocr.sexo ?? '',
     parentesco: '',
   };
 }
