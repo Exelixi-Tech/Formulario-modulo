@@ -465,6 +465,26 @@ function makeBridge(): BridgeAPI {
       return false;
     }
 
+    // Salir del paso de personas (2) hacia adelante por el stepper superior exige la misma
+    // validación que el botón Continuar (__validateStep2); hacia atrás no se valida.
+    if (currentStep === 2 && targetStep > 2) {
+      const validateStep2 = (window as unknown as Record<string, unknown>).__validateStep2 as
+        | (() => boolean | Promise<boolean>)
+        | undefined;
+      if (validateStep2) {
+        let valid = false;
+        try {
+          valid = await validateStep2();
+        } catch (e) {
+          console.warn('[bridge] navigateToStep: __validateStep2 falló', e);
+        }
+        if (!valid) {
+          console.warn('[bridge] navigateToStep blocked: datos de personas incompletos');
+          return false;
+        }
+      }
+    }
+
     const currentModule = stepToModuleOrder(currentStep);
     const targetModule = stepToModuleOrder(targetStep);
 
