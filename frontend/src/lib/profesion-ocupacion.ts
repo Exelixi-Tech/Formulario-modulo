@@ -90,6 +90,37 @@ export function migrateOcupacionSeparada(t: ProfesionOcupacion): Partial<Tomador
   };
 }
 
+/**
+ * Renovación: los códigos vienen de Sis2000 (maclient_atr). Con el catálogo cargado se completa el
+ * nombre de los que existen y se vacían los que no, para que el usuario los elija. Un catálogo vacío
+ * no toca su campo. Null si no hay cambios.
+ */
+export function sanitizeProfesionOcupacionCodes(
+  person: ProfesionOcupacionFields,
+  catalogs: { profesiones: CatalogItem[]; ocupaciones: CatalogItem[]; actividades: CatalogItem[] },
+): Partial<ProfesionOcupacionFields> | null {
+  const patch: Partial<ProfesionOcupacionFields> = {};
+  const check = (
+    codeKey: 'cprofesion' | 'cocupacion' | 'cactividad',
+    labelKey: 'xprofesion' | 'xocupacion' | 'xactividad',
+    items: CatalogItem[],
+  ) => {
+    const code = person[codeKey];
+    if (code == null || String(code).trim() === '' || !items.length) return;
+    const found = items.find((i) => String(i.code) === String(code).trim());
+    if (!found) {
+      patch[codeKey] = undefined;
+      patch[labelKey] = undefined;
+    } else if (!person[labelKey]) {
+      patch[labelKey] = String(found.label);
+    }
+  };
+  check('cprofesion', 'xprofesion', catalogs.profesiones);
+  check('cocupacion', 'xocupacion', catalogs.ocupaciones);
+  check('cactividad', 'xactividad', catalogs.actividades);
+  return Object.keys(patch).length ? patch : null;
+}
+
 /** Completa los códigos que faltan buscando el nombre en los catálogos. Null si no hay cambios. */
 export function resolveProfesionOcupacionCodes(
   t: ProfesionOcupacion,

@@ -40,6 +40,7 @@ import {
   migrateOcupacionSeparada,
   pickProfesionOcupacion,
   resolveProfesionOcupacionCodes,
+  sanitizeProfesionOcupacionCodes,
   validateProfesionOcupacion,
 } from '../../lib/profesion-ocupacion';
 import { ProfesionOcupacionFields } from '../../components/ProfesionOcupacionFields';
@@ -268,7 +269,9 @@ export function EmissionStep() {
   // Personas (funerario, vida, AP, salud…): profesión y ocupación del tomador y del titular.
   const personasProfesionFlow = (isFunerario() || usesFuneralStep()) && !exelixiFlow && !isCotizadorFlow();
   const pideProfesion = isRcvEmision || personasProfesionFlow;
-  const showProfesion = pideProfesion && formConfig?.campos?.cprofesion?.activo !== false;
+  // Sin catálogo de profesiones (sp_get_profesiones_nexus ausente en la BD) no se puede elegir: no se pide.
+  const sinCatalogoProfesiones = !catalogs.loading && catalogs.profesiones.length === 0;
+  const showProfesion = pideProfesion && !sinCatalogoProfesiones && formConfig?.campos?.cprofesion?.activo !== false;
   const showOcupacion = pideProfesion && formConfig?.campos?.cocupacion?.activo !== false;
   const showActividad = pideProfesion && formConfig?.campos?.cactividad?.activo !== false;
   const profesionVisible = { profesion: showProfesion, ocupacion: showOcupacion, actividad: showActividad };
@@ -312,6 +315,15 @@ export function EmissionStep() {
     if (patch) setTomador(patch);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pideProfesion, catalogs.loading, tomador.xprofesion, tomador.xocupacion]);
+  // Renovación: profesión/ocupación/actividad precargadas de Sis2000; las que no están en el catálogo se vacían.
+  useEffect(() => {
+    if (!identidadRenovacion || !pideProfesion || catalogs.loading) return;
+    const pt = sanitizeProfesionOcupacionCodes(tomador, catalogs);
+    if (pt) setTomador(pt);
+    const pa = sanitizeProfesionOcupacionCodes(asegurado, catalogs);
+    if (pa) setAsegurado(pa);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [identidadRenovacion, pideProfesion, catalogs.loading]);
   /** Viajero: no bloquear por póliza funeraria vigente (ramo distinto / recompra). */
   const skipPolizaVigente = isViajeroPersonasCanal(metadataCanal);
   /** Viajero: sin cobertura para indemnizar a un beneficiario, no se piden beneficiarios. */

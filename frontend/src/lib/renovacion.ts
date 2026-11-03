@@ -12,7 +12,7 @@ import { useWizardStore } from '../store/wizardStore';
 import { fetchRenovacion, type RenovacionApiData, type RenovacionPersonaApi } from './api';
 import { mapProprietaryToPerson } from './map-proprietary';
 import { persistProductFromHints } from './product';
-import type { FuneralPerson, VehicleData } from '../types';
+import type { FuneralPerson, ProfesionOcupacionFields, VehicleData } from '../types';
 
 export type RenovacionEstado = 'pendiente' | 'cargando' | 'listo' | 'bloqueada' | 'error';
 
@@ -140,6 +140,25 @@ function personaToProprietary(p: RenovacionPersonaApi) {
   };
 }
 
+/**
+ * Profesión / ocupación / actividad guardadas en Sis2000 (maclient_atr). Solo los códigos que vienen;
+ * el formulario descarta los que no estén en el catálogo y el usuario elige los que falten.
+ */
+export function profesionDesdeApi(p: RenovacionPersonaApi | null | undefined): ProfesionOcupacionFields {
+  const code = (v: unknown) => {
+    const s = String(v ?? '').trim();
+    return s && s !== '0' ? s : undefined;
+  };
+  const out: ProfesionOcupacionFields = { ocupacionSeparada: true };
+  const cprofesion = code(p?.cprofesion);
+  const cocupacion = code(p?.cocupacion);
+  const cactividad = code(p?.cactividad);
+  if (cprofesion) out.cprofesion = cprofesion;
+  if (cocupacion) out.cocupacion = cocupacion;
+  if (cactividad) out.cactividad = cactividad;
+  return out;
+}
+
 function mismaPersona(a?: RenovacionPersonaApi | null, b?: RenovacionPersonaApi | null): boolean {
   const da = String(a?.cci_rif ?? '').replace(/\D/g, '');
   const db = String(b?.cci_rif ?? '').replace(/\D/g, '');
@@ -216,12 +235,18 @@ function aplicarPrecarga(data: RenovacionApiData) {
   if (esRcv) persistProductFromHints({ product: 'rcv' });
 
   if (data.tomador) {
-    store.setTomador(mapProprietaryToPerson(personaToProprietary(data.tomador)));
+    store.setTomador({
+      ...mapProprietaryToPerson(personaToProprietary(data.tomador)),
+      ...profesionDesdeApi(data.tomador),
+    });
   }
   const titular = data.titular;
   if (titular && data.tomador && !mismaPersona(titular, data.tomador)) {
     store.setSameInsured(false);
-    store.setAsegurado(mapProprietaryToPerson(personaToProprietary(titular)));
+    store.setAsegurado({
+      ...mapProprietaryToPerson(personaToProprietary(titular)),
+      ...profesionDesdeApi(titular),
+    });
   } else {
     store.setSameInsured(true);
   }
