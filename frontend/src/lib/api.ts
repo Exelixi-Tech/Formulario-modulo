@@ -803,6 +803,11 @@ export interface RenovacionPersonaApi {
   cestado?: string | null;
   cciudad?: string | null;
   xdireccion?: string | null;
+  /** maclient_atr: profesión (maprofes), ocupación (maocupac) y actividad económica (maactivi). */
+  cprofesion?: string | null;
+  cocupacion?: string | null;
+  cactividad?: string | null;
+  bocupacion_separada?: boolean;
 }
 
 export interface RenovacionPlanApi {
