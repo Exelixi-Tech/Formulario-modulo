@@ -31,7 +31,12 @@ interface IdentityInputProps {
   loading?: boolean;
   /** Máximo de caracteres del número (default: límite Sis2000 cci_rif = 13). */
   maxLength?: number;
+  /** false: oculta J (titular, asegurado o beneficiario de personas: solo persona natural). */
+  allowJuridico?: boolean;
 }
+
+/** Pasaporte: alfanumérico en mayúsculas, hasta 15 caracteres. */
+const PASAPORTE_MAX = 15;
 
 export function IdentityInput({
   tipoDoc,
@@ -43,7 +48,14 @@ export function IdentityInput({
   inputId,
   loading = false,
   maxLength = PERSON_FIELD_LIMITS.identificacion,
+  allowJuridico = true,
 }: IdentityInputProps) {
+  const esPasaporte = tipoDoc === 'P';
+  const maxLen = esPasaporte ? Math.max(maxLength, PASAPORTE_MAX) : maxLength;
+  // Si ya viene J (OCR), se deja visible para que el usuario vea el valor y lo cambie.
+  const options = NATIONALITY_OPTIONS.filter(
+    (o) => allowJuridico || o.value !== 'J' || tipoDoc === 'J',
+  );
   return (
     <div
       className={
@@ -67,7 +79,7 @@ export function IdentityInput({
             'hover:bg-slate-100 transition-colors disabled:opacity-60'
           }
         >
-          {NATIONALITY_OPTIONS.map((o) => (
+          {options.map((o) => (
             <option key={o.value} value={o.value}>
               {o.value}
             </option>
@@ -85,15 +97,17 @@ export function IdentityInput({
         id={inputId}
         type="text"
         inputMode={['V', 'E', 'J'].includes(tipoDoc) ? 'numeric' : 'text'}
-        maxLength={maxLength}
+        maxLength={maxLen}
         value={identificacion}
         disabled={loading}
         onChange={(e) => {
           let val = e.target.value;
           if (['V', 'E', 'J'].includes(tipoDoc)) {
             val = val.replace(/\D/g, '');
+          } else if (esPasaporte) {
+            val = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
           }
-          if (val.length > maxLength) val = val.slice(0, maxLength);
+          if (val.length > maxLen) val = val.slice(0, maxLen);
           onIdentificacionChange(val);
         }}
         onBlur={(e) => onIdentificacionBlur?.(e.target.value)}

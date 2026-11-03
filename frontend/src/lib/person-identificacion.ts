@@ -21,18 +21,66 @@ function isRifJuridicoTipoDoc(tipoDoc?: string): boolean {
   return ['J', 'G', 'C'].includes(String(tipoDoc ?? '').trim().toUpperCase());
 }
 
-/** Máximo de dígitos según tipo de documento: V = cédula venezolana (8); J/G/C = RIF (9); E/P = extranjero (10). */
+/** Pasaporte (P): número alfanumérico de 5 a 15 caracteres (ej. EM2849387). */
+export const PASAPORTE_MIN_LENGTH = 5;
+export const PASAPORTE_MAX_LENGTH = 15;
+
+export function isPasaporteTipoDoc(tipoDoc?: string): boolean {
+  return String(tipoDoc ?? '').trim().toUpperCase() === 'P';
+}
+
+/**
+ * Sis2000 guarda la identificación en maclient.cci_rif (NUMERIC) y los SP de emisión reciben
+ * @xrif_* numeric: un pasaporte con letras no se puede emitir. Se acepta en pantalla (OCR) pero
+ * se bloquea con un mensaje que indica la alternativa (RIF personal E del extranjero).
+ */
+export const PASAPORTE_ALFANUMERICO_MSG =
+  'Sis2000 solo admite identificación numérica. Para pasaporte alfanumérico use el RIF personal (E-xxxxxxxx-x) del extranjero';
+
+export const PERSONA_JURIDICA_NO_PERMITIDA_MSG =
+  'Debe ser persona natural (V, E o P). El RIF jurídico (J/G/C) solo aplica al tomador';
+
+export function isRifJuridico(tipoDoc?: string): boolean {
+  return isRifJuridicoTipoDoc(tipoDoc);
+}
+
+/** Validación del número de pasaporte; undefined si no es P o si es emitible en Sis2000. */
+export function validatePasaporte(identificacion?: string, tipoDoc?: string): string | undefined {
+  if (!isPasaporteTipoDoc(tipoDoc)) return undefined;
+  const v = String(identificacion ?? '').trim().toUpperCase();
+  if (!v) return 'La identificación es obligatoria';
+  if (!/^[A-Z0-9]+$/.test(v)) return 'El pasaporte solo admite letras y números';
+  if (v.length < PASAPORTE_MIN_LENGTH || v.length > PASAPORTE_MAX_LENGTH) {
+    return `El pasaporte debe tener entre ${PASAPORTE_MIN_LENGTH} y ${PASAPORTE_MAX_LENGTH} caracteres`;
+  }
+  if (/[A-Z]/.test(v)) return PASAPORTE_ALFANUMERICO_MSG;
+  if (v.length > FOREIGN_IDENTIFICACION_DIGITS_MAX) {
+    return `El pasaporte numérico no puede tener más de ${FOREIGN_IDENTIFICACION_DIGITS_MAX} dígitos`;
+  }
+  return undefined;
+}
+
+/** Máximo de caracteres según tipo de documento: V = cédula venezolana (8); J/G/C = RIF (9); E = extranjero (10); P = pasaporte (15). */
 export function secondaryIdentificacionMax(tipoDoc?: string): number {
+  if (isPasaporteTipoDoc(tipoDoc)) return PASAPORTE_MAX_LENGTH;
   if (isForeignTipoDoc(tipoDoc)) return FOREIGN_IDENTIFICACION_DIGITS_MAX;
   if (isRifJuridicoTipoDoc(tipoDoc)) return RIF_JURIDICO_DIGITS_MAX;
   return venezuelanCedulaDigitsMax;
 }
 
-/** Validación de cédula para asegurado, beneficiario y conductor (no tomador). */
+/**
+ * Validación de cédula para asegurado, beneficiario y conductor (no tomador).
+ * soloPersonaNatural: titular/asegurado/beneficiario de personas no puede ser J/G/C.
+ */
 export function validateSecondaryPersonIdentificacion(
   identificacion?: string,
   tipoDoc?: string,
+  opts?: { soloPersonaNatural?: boolean },
 ): string | undefined {
+  if (opts?.soloPersonaNatural && isRifJuridicoTipoDoc(tipoDoc)) {
+    return PERSONA_JURIDICA_NO_PERMITIDA_MSG;
+  }
+  if (isPasaporteTipoDoc(tipoDoc)) return validatePasaporte(identificacion, tipoDoc);
   const digits = countIdentificacionDigits(identificacion);
   if (!String(identificacion ?? '').trim() || digits === 0) {
     return 'La identificación es obligatoria';
