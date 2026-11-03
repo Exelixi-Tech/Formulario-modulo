@@ -169,11 +169,11 @@ function mapVehiculo(v: NonNullable<RenovacionApiData['vehiculo']>): Partial<Veh
   const out: Partial<VehicleData> = { tipoPlaca: 'nacional' };
   if (v.xplaca) out.placa = String(v.xplaca).trim().toUpperCase();
   if (v.cano != null) out.año = String(v.cano);
-  if (v.xmarca) out.marca = v.xmarca;
-  if (v.xmodelo) out.modelo = v.xmodelo;
-  if (v.cmarca) out.cmarca = String(v.cmarca);
-  if (v.cmodelo) out.cmodelo = String(v.cmodelo);
-  if (v.cversion) out.cversion = String(v.cversion);
+  if (v.xmarca) out.marca = String(v.xmarca).trim();
+  if (v.xmodelo) out.modelo = String(v.xmodelo).trim();
+  if (v.cmarca) out.cmarca = String(v.cmarca).trim();
+  if (v.cmodelo) out.cmodelo = String(v.cmodelo).trim();
+  if (v.cversion) out.cversion = String(v.cversion).trim();
   if (v.xcolor) out.color = v.xcolor;
   if (v.xsercar) out.serial = String(v.xsercar).trim().toUpperCase();
   if (v.xsermot) out.serialMotor = String(v.xsermot).trim().toUpperCase();

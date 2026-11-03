@@ -444,6 +444,24 @@ export function VehicleStep() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [marcas]);
 
+  // ── Código sin etiqueta (p. ej. renovación sin JOIN INMA): completar marca/modelo desde el catálogo ──
+  // El select muestra el código (cmarca/cmodelo) pero la validación y la emisión usan marca/modelo.
+  useEffect(() => {
+    const code = String(vehicle.cmarca ?? '').trim();
+    if (!code || (vehicle.marca ?? '').trim() || !marcas.length) return;
+    const m = marcas.find(x => String(x.cmarca).trim() === code);
+    if (m) setVehicle({ marca: m.xmarca });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [marcas, vehicle.cmarca, vehicle.marca]);
+
+  useEffect(() => {
+    const code = String(vehicle.cmodelo ?? '').trim();
+    if (!code || (vehicle.modelo ?? '').trim() || !modelos.length) return;
+    const m = modelos.find(x => String(x.cmodelo).trim() === code);
+    if (m) setVehicle({ modelo: m.xmodelo });
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [modelos, vehicle.cmodelo, vehicle.modelo]);
+
   // ── Cuando cambia cmarca: cargar modelos ─────────────────────────────────
   useEffect(() => {
     const y = parseInt(vehicle.año, 10);
