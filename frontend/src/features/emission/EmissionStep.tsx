@@ -799,7 +799,8 @@ export function EmissionStep() {
     };
 
     validatePerson(tomador, 'tom_', {
-      secondaryIdent: checkFuneralFlow || (isRcvEmision && sameInsured !== false),
+      // RCV: emision-api valida rif_tomador por tipo (V 8, J/G 9, E 10) aunque el titular sea otro.
+      secondaryIdent: checkFuneralFlow || isRcvEmision,
     });
     if (pideProfesion && !esPJ) {
       Object.assign(e, validateProfesionOcupacion(tomador, 'tom_', profesionVisible));
@@ -1174,7 +1175,7 @@ export function EmissionStep() {
             </div>
           )}
           {renderPersonForm(tomador, setTomador, 'tom_', ciudadesState, {
-            secondaryIdent: checkFuneralFlow,
+            secondaryIdent: checkFuneralFlow || isRcvEmision,
           })}
         </SectionCard>
 
