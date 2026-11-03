@@ -93,6 +93,9 @@ function findBestMatch<T>(
   return partial.reduce((best, cur) => (val(cur).length > val(best).length ? cur : best));
 }
 
+/** Año mínimo del vehículo: el SP RCV exige > 1900 y el catálogo INMA (VInma) arranca en 1950. */
+const VEHICLE_YEAR_MIN = 1901;
+
 const emailRe = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
 interface VehicleErrors {
@@ -154,7 +157,7 @@ function useInmaCatalog(binacional: boolean) {
   const [loadCu, setLoadCu] = useState(false);
 
   const loadMarcas = useCallback(async (y: number) => {
-    if (!y || y < 1990) return;
+    if (!y || y < VEHICLE_YEAR_MIN) return;
     setLoadM(true); setMarcas([]); setModelos([]); setVersiones([]); setCategoriasUso([]);
     try { setMarcas((await catalogoApi.marcas(y, binacional)).data.data ?? []); } catch { /* silencioso */ }
     finally { setLoadM(false); }
@@ -399,7 +402,7 @@ export function VehicleStep() {
   // ── Cuando cambia el año o el modo binacional: cargar marcas ──────────────
   useEffect(() => {
     const y = parseInt(vehicle.año, 10);
-    if (!y || y < 1990) return;
+    if (!y || y < VEHICLE_YEAR_MIN) return;
     autoSelectedMarca.current  = false;
     autoSelectedModelo.current = false;
     resetModelos();
@@ -428,7 +431,7 @@ export function VehicleStep() {
         toast.warning(title, message, isBinacional ? 8000 : 7000);
       };
 
-      if (isBinacional && y >= 1990 && ocrMarca) {
+      if (isBinacional && y >= VEHICLE_YEAR_MIN && ocrMarca) {
         void catalogoApi.marcaDisponibilidad(y, ocrMarca, serialHint)
           .then(({ data }) => {
             if (data.inBinacionalCatalog) return;
@@ -507,7 +510,7 @@ export function VehicleStep() {
   // ── Resolver por texto (marca/modelo) si tenemos valores pero no códigos INMA ──
   useEffect(() => {
     const y = parseInt(vehicle.año, 10);
-    if (!y || y < 1990) return;
+    if (!y || y < VEHICLE_YEAR_MIN) return;
     if (!vehicle.marca || !vehicle.modelo) return;
     if (vehicle.cmarca && vehicle.cmodelo) return; // ya tenemos códigos
 
