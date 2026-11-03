@@ -280,8 +280,11 @@ export function EmissionStep() {
   const certOcrPais = useWizardStore((s) => s.documents.certificado?.ocr);
   const placaExtranjera = tipoPlaca === 'extranjera' || isExtranjeroCarnet(certOcrPais);
   const showPaisDireccion = isRcvEmision && !exelixiFlow && placaExtranjera;
-  const paisTomador = showPaisDireccion ? (tomador.cpais ?? 57) : 58;
-  const paisAsegurado = showPaisDireccion ? (asegurado.cpais ?? 57) : 58;
+  // Un solo país por persona para el combo de país, los estados y las ciudades. Sin cpais es
+  // Venezuela, como muestra el combo: con ?? 57 un estado venezolano de Sis2000 pedía ciudades de Colombia.
+  const paisDireccion = (p: { cpais?: number }) => (showPaisDireccion ? (p.cpais ?? 58) : 58);
+  const paisTomador = paisDireccion(tomador);
+  const paisAsegurado = paisDireccion(asegurado);
   const estadosColombia = useEstadosPais(
     showPaisDireccion && (paisTomador === 57 || paisAsegurado === 57) ? 57 : null,
   );
@@ -1030,9 +1033,9 @@ export function EmissionStep() {
           setPerson={setPerson}
           prefix={prefix}
           errors={errors}
-          estados={showPaisDireccion && person.cpais === 57 ? estadosColombia.estados : catalogs.estados}
+          estados={paisDireccion(person) === 57 ? estadosColombia.estados : catalogs.estados}
           ciuState={ciuState}
-          catalogsLoading={showPaisDireccion && person.cpais === 57 ? estadosColombia.loading : catalogs.loading}
+          catalogsLoading={paisDireccion(person) === 57 ? estadosColombia.loading : catalogs.loading}
           exelixiFlow={exelixiFlow}
           showPais={showPaisDireccion && (prefix === 'tom_' || prefix === 'aseg_')}
         />
