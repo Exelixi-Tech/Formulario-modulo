@@ -761,7 +761,8 @@ export function EmissionStep() {
       // Personas: tomador y titular admiten pasaporte con letras (cid completo + cci_rif dígitos). RCV no.
       const permitirPasaporteAlfanumerico =
         personasProfesionFlow && (prefix === 'tom_' || prefix === 'aseg_');
-      const pasaporteErr = validatePasaporte(person.identificacion, person.tipoDoc, {
+      // RCV: sin validación nueva de pasaporte (igual que main).
+      const pasaporteErr = !personasProfesionFlow ? undefined : validatePasaporte(person.identificacion, person.tipoDoc, {
         permitirAlfanumerico: permitirPasaporteAlfanumerico,
       });
 
