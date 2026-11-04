@@ -111,7 +111,8 @@ export function validateSecondaryPersonIdentificacion(
   if (opts?.soloPersonaNatural && isRifJuridicoTipoDoc(tipoDoc)) {
     return PERSONA_JURIDICA_NO_PERMITIDA_MSG;
   }
-  if (isPasaporteTipoDoc(tipoDoc)) {
+  // Solo personas (soloPersonaNatural o pasaporte con letras permitido); RCV sigue contando dígitos como en main.
+  if (isPasaporteTipoDoc(tipoDoc) && (opts?.soloPersonaNatural || opts?.permitirPasaporteAlfanumerico)) {
     return validatePasaporte(identificacion, tipoDoc, {
       permitirAlfanumerico: opts?.permitirPasaporteAlfanumerico,
     });
