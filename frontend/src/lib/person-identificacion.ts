@@ -21,18 +21,102 @@ function isRifJuridicoTipoDoc(tipoDoc?: string): boolean {
   return ['J', 'G', 'C'].includes(String(tipoDoc ?? '').trim().toUpperCase());
 }
 
-/** Máximo de dígitos según tipo de documento: V = cédula venezolana (8); J/G/C = RIF (9); E/P = extranjero (10). */
+/** Pasaporte (P): número alfanumérico de 5 a 15 caracteres (ej. EM2849387). */
+export const PASAPORTE_MIN_LENGTH = 5;
+export const PASAPORTE_MAX_LENGTH = 15;
+
+export function isPasaporteTipoDoc(tipoDoc?: string): boolean {
+  return String(tipoDoc ?? '').trim().toUpperCase() === 'P';
+}
+
+/**
+ * Sis2000 guarda la identificación en maclient.cci_rif (NUMERIC) y los SP de emisión reciben
+ * @xrif_* numeric: un pasaporte con letras no se puede emitir. Se acepta en pantalla (OCR) pero
+ * se bloquea con un mensaje que indica la alternativa (RIF personal E del extranjero).
+ */
+export const PASAPORTE_ALFANUMERICO_MSG =
+  'Sis2000 solo admite identificación numérica. Para pasaporte alfanumérico use el RIF personal (E-xxxxxxxx-x) del extranjero';
+
+export const PERSONA_JURIDICA_NO_PERMITIDA_MSG =
+  'Debe ser persona natural (V, E o P). El RIF jurídico (J/G/C) solo aplica al tomador';
+
+export function isRifJuridico(tipoDoc?: string): boolean {
+  return isRifJuridicoTipoDoc(tipoDoc);
+}
+
+/**
+ * Pasaporte alfanumérico en titular/tomador de personas: Sis2000 guarda el pasaporte completo en
+ * maclient.cid ('P-EM2849387') y solo los dígitos en cci_rif (2849387), como SysIP.
+ * Límites: 13 caracteres (cid de 15 con 'P-') y entre 5 y 9 dígitos (numeric(9) del SP).
+ */
+export const PASAPORTE_ALFA_MAX_LENGTH = 13;
+export const PASAPORTE_ALFA_DIGITS_MIN = 5;
+export const PASAPORTE_ALFA_DIGITS_MAX = 9;
+
+export const PASAPORTE_ALFA_FORMATO_MSG =
+  `El pasaporte con letras debe tener máximo ${PASAPORTE_ALFA_MAX_LENGTH} letras o números y entre ${PASAPORTE_ALFA_DIGITS_MIN} y ${PASAPORTE_ALFA_DIGITS_MAX} dígitos`;
+
+/**
+ * Validación del número de pasaporte; undefined si no es P o si es emitible en Sis2000.
+ * permitirAlfanumerico: solo titular y tomador de personas (RCV, asegurados adicionales y
+ * beneficiarios siguen exigiendo pasaporte numérico).
+ */
+export function validatePasaporte(
+  identificacion?: string,
+  tipoDoc?: string,
+  opts?: { permitirAlfanumerico?: boolean },
+): string | undefined {
+  if (!isPasaporteTipoDoc(tipoDoc)) return undefined;
+  const v = String(identificacion ?? '').trim().toUpperCase();
+  if (!v) return 'La identificación es obligatoria';
+  if (!/^[A-Z0-9]+$/.test(v)) return 'El pasaporte solo admite letras y números';
+  if (v.length < PASAPORTE_MIN_LENGTH || v.length > PASAPORTE_MAX_LENGTH) {
+    return `El pasaporte debe tener entre ${PASAPORTE_MIN_LENGTH} y ${PASAPORTE_MAX_LENGTH} caracteres`;
+  }
+  if (/[A-Z]/.test(v)) {
+    if (!opts?.permitirAlfanumerico) return PASAPORTE_ALFANUMERICO_MSG;
+    const digits = countIdentificacionDigits(v);
+    if (
+      v.length > PASAPORTE_ALFA_MAX_LENGTH ||
+      digits < PASAPORTE_ALFA_DIGITS_MIN ||
+      digits > PASAPORTE_ALFA_DIGITS_MAX
+    ) {
+      return PASAPORTE_ALFA_FORMATO_MSG;
+    }
+    return undefined;
+  }
+  if (v.length > FOREIGN_IDENTIFICACION_DIGITS_MAX) {
+    return `El pasaporte numérico no puede tener más de ${FOREIGN_IDENTIFICACION_DIGITS_MAX} dígitos`;
+  }
+  return undefined;
+}
+
+/** Máximo de caracteres según tipo de documento: V = cédula venezolana (8); J/G/C = RIF (9); E = extranjero (10); P = pasaporte (15). */
 export function secondaryIdentificacionMax(tipoDoc?: string): number {
+  if (isPasaporteTipoDoc(tipoDoc)) return PASAPORTE_MAX_LENGTH;
   if (isForeignTipoDoc(tipoDoc)) return FOREIGN_IDENTIFICACION_DIGITS_MAX;
   if (isRifJuridicoTipoDoc(tipoDoc)) return RIF_JURIDICO_DIGITS_MAX;
   return venezuelanCedulaDigitsMax;
 }
 
-/** Validación de cédula para asegurado, beneficiario y conductor (no tomador). */
+/**
+ * Validación de cédula para asegurado, beneficiario y conductor (no tomador).
+ * soloPersonaNatural: titular/asegurado/beneficiario de personas no puede ser J/G/C.
+ */
 export function validateSecondaryPersonIdentificacion(
   identificacion?: string,
   tipoDoc?: string,
+  opts?: { soloPersonaNatural?: boolean; permitirPasaporteAlfanumerico?: boolean },
 ): string | undefined {
+  if (opts?.soloPersonaNatural && isRifJuridicoTipoDoc(tipoDoc)) {
+    return PERSONA_JURIDICA_NO_PERMITIDA_MSG;
+  }
+  // Solo personas (soloPersonaNatural o pasaporte con letras permitido); RCV sigue contando dígitos como en main.
+  if (isPasaporteTipoDoc(tipoDoc) && (opts?.soloPersonaNatural || opts?.permitirPasaporteAlfanumerico)) {
+    return validatePasaporte(identificacion, tipoDoc, {
+      permitirAlfanumerico: opts?.permitirPasaporteAlfanumerico,
+    });
+  }
   const digits = countIdentificacionDigits(identificacion);
   if (!String(identificacion ?? '').trim() || digits === 0) {
     return 'La identificación es obligatoria';

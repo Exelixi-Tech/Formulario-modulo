@@ -43,9 +43,13 @@ import {
 } from '../../lib/profesion-ocupacion';
 import { ProfesionOcupacionFields } from '../../components/ProfesionOcupacionFields';
 import {
+  PASAPORTE_MAX_LENGTH,
+  isPasaporteTipoDoc,
   secondaryIdentificacionMax,
+  validatePasaporte,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
+import { resolvePersonaJuridica, validateRifJuridicoEmitible } from '../../lib/tomador-juridico';
 import {
   rcvIdentityKeepFromOcr,
   resolveRcvOcrIdentDigits,
@@ -270,6 +274,26 @@ export function EmissionStep() {
   const showActividad = pideProfesion && formConfig?.campos?.cactividad?.activo !== false;
   const profesionVisible = { profesion: showProfesion, ocupacion: showOcupacion, actividad: showActividad };
   const esPJ = isPersonaJuridica(tomador.tipoDoc);
+  /** Regla común de persona jurídica (RCV, patrimoniales y tomador de personas). */
+  const juridicaDe = (tipoDoc: string | undefined, prefix: string) =>
+    resolvePersonaJuridica(tipoDoc, {
+      prefix,
+      rcv: isRcvEmision,
+      patrimoniales: isPatrimoniales(),
+      personas: personasProfesionFlow,
+    });
+  /** Personas: tomador jurídico no puede ser el asegurado (titular siempre persona natural). */
+  const tomadorPjPersonas = personasProfesionFlow && esPJ;
+  useEffect(() => {
+    if (tomadorPjPersonas && sameInsured !== false) setSameInsured(false);
+  }, [tomadorPjPersonas, sameInsured, setSameInsured]);
+  useEffect(() => {
+    // Sin apellido, sexo ni estado civil en el tomador jurídico (Emisión los manda en null al SP).
+    if (!tomadorPjPersonas) return;
+    if (tomador.apellido || tomador.sexo || tomador.estadoCivil) {
+      setTomador({ apellido: '', sexo: '', estadoCivil: '' });
+    }
+  }, [tomadorPjPersonas, tomador.apellido, tomador.sexo, tomador.estadoCivil, setTomador]);
   // Placa extranjera: dirección en Venezuela o Colombia (catálogos por país; Sis2000 guarda cpais).
   const tipoPlaca = useWizardStore((s) => s.vehicle?.tipoPlaca);
   // vehicle.tipoPlaca se fija en el paso del vehículo (después de este); el OCR del
@@ -748,13 +772,26 @@ export function EmissionStep() {
       prefix: string,
       opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
     ) => {
-      const isJuridica = (isPatrimoniales() || isRcvEmision) && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
-      // RCV persona jurídica (RIF J/G/C): nombre = razón social, sin apellido/sexo/estado civil.
-      const isJuridicaRcv = isRcvEmision && isJuridica;
+      // RCV y tomador de personas con RIF J/G/C: nombre = razón social, sin apellido/sexo/estado civil.
+      const { isJuridica, isJuridicaRcv } = juridicaDe(person.tipoDoc, prefix);
+      // Personas: titular y asegurado son siempre persona natural (el RIF jurídico solo va en el tomador).
+      const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_';
+      // Personas: tomador y titular admiten pasaporte con letras (cid completo + cci_rif dígitos). RCV no.
+      const permitirPasaporteAlfanumerico =
+        personasProfesionFlow && (prefix === 'tom_' || prefix === 'aseg_');
+      // RCV: sin validación nueva de pasaporte (igual que main).
+      const pasaporteErr = !personasProfesionFlow ? undefined : validatePasaporte(person.identificacion, person.tipoDoc, {
+        permitirAlfanumerico: permitirPasaporteAlfanumerico,
+      });
 
       if (opts?.secondaryIdent) {
-        const idErr = validateSecondaryPersonIdentificacion(person.identificacion, person.tipoDoc);
+        const idErr = validateSecondaryPersonIdentificacion(person.identificacion, person.tipoDoc, {
+          soloPersonaNatural,
+          permitirPasaporteAlfanumerico,
+        });
         if (idErr) e[`${prefix}identificacion`] = idErr;
+      } else if (pasaporteErr) {
+        e[`${prefix}identificacion`] = pasaporteErr;
       } else if (req(person.identificacion)) {
         e[`${prefix}identificacion`] = 'La identificación es obligatoria';
       } else if (digs(person.identificacion) < 1) {
@@ -771,6 +808,14 @@ export function EmissionStep() {
         } else if (tipoRcv === 'V' && digs(person.identificacion) > PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax) {
           e[`${prefix}identificacion`] = `La cédula venezolana tiene máximo ${PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax} dígitos (no el RIF con dígito verificador)`;
         }
+      } else if (personasProfesionFlow && prefix === 'tom_' && !e[`${prefix}identificacion`]) {
+        // Tomador de personas: mismas reglas G/C/V9 que RCV.
+        const pjErr = validateRifJuridicoEmitible(
+          person.tipoDoc,
+          person.identificacion,
+          PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax,
+        );
+        if (pjErr) e[`${prefix}identificacion`] = pjErr;
       }
 
       if (req(person.nombre)) {
@@ -878,7 +923,9 @@ export function EmissionStep() {
       bens.forEach((b, i) => {
         if (!funeralBeneficiarioTieneDatos(b)) return;
         filled += 1;
-        const idErr = validateSecondaryPersonIdentificacion(b.identificacion, b.tipoDoc);
+        const idErr = validateSecondaryPersonIdentificacion(b.identificacion, b.tipoDoc, {
+          soloPersonaNatural: personasProfesionFlow,
+        });
         if (idErr) e[`fben_${i}_id`] = idErr;
         if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
         if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
@@ -968,8 +1015,8 @@ export function EmissionStep() {
     ciuState: any,
     opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
   ) => {
-    const isJuridica = (isPatrimoniales() || isRcvEmision) && (person.tipoDoc === 'J' || isPersonaJuridica(person.tipoDoc));
-    const isJuridicaRcv = isRcvEmision && isJuridica;
+    const { isJuridica, isJuridicaRcv } = juridicaDe(person.tipoDoc, prefix);
+    const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_';
 
     return (
     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
@@ -1008,6 +1055,7 @@ export function EmissionStep() {
               : PERSON_FIELD_LIMITS.identificacion
           }
           loading={Boolean(lookupLoading[prefix])}
+          allowJuridico={!soloPersonaNatural}
           onTipoDocChange={(v) => {
             lastLookupCid.current[prefix] = '';
             setPerson({ tipoDoc: v });
@@ -1016,7 +1064,11 @@ export function EmissionStep() {
             lastLookupCid.current[prefix] = '';
             lastFuneralCedula.current[prefix] = '';
             manualIdentEdit.current[prefix] = true;
-            setPerson({ identificacion: clipPersonField('identificacion', v) });
+            setPerson({
+              identificacion: isPasaporteTipoDoc(person.tipoDoc)
+                ? v.slice(0, PASAPORTE_MAX_LENGTH)
+                : clipPersonField('identificacion', v),
+            });
           }}
           onIdentificacionBlur={
             isRcvEmision
@@ -1313,9 +1365,18 @@ export function EmissionStep() {
           >
             <ToggleSwitch
               checked={!sameInsured}
-              onChange={(v) => setSameInsured(!v)}
+              onChange={(v) => {
+                // Tomador jurídico en personas: el titular siempre es otra persona (natural).
+                if (tomadorPjPersonas && !v) return;
+                setSameInsured(!v);
+              }}
               label="¿La persona que pagará la Póliza es diferente a la que será asegurada?"
             />
+            {tomadorPjPersonas && (
+              <p className="mt-1 text-xs text-slate-500">
+                El tomador es persona jurídica: el titular asegurado debe ser una persona natural.
+              </p>
+            )}
             {(checkFuneralFlow || !sameInsured) &&
               renderPersonForm(asegurado, setAsegurado, 'aseg_', aseguradoCiudades, {
                 secondaryIdent: true,
@@ -1386,6 +1447,7 @@ export function EmissionStep() {
                         tipoDoc={ben.tipoDoc || 'V'}
                         identificacion={ben.identificacion}
                         maxLength={secondaryIdentificacionMax(ben.tipoDoc)}
+                        allowJuridico={!personasProfesionFlow}
                         onTipoDocChange={(v) => patchFuneralBeneficiario(idx, { tipoDoc: v })}
                         onIdentificacionChange={(v) =>
                           patchFuneralBeneficiario(idx, {

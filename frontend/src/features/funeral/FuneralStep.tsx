@@ -98,6 +98,7 @@ function PersonFields({
           tipoDoc={person.tipoDoc || 'V'}
           identificacion={person.identificacion}
           maxLength={secondaryIdentificacionMax(person.tipoDoc)}
+          allowJuridico={false}
           loading={identityLoading}
           onTipoDocChange={(v) => onChange({ tipoDoc: v })}
           onIdentificacionChange={(v) =>
@@ -323,7 +324,8 @@ export function FuneralStep() {
     const req = (v?: string) => !(v ?? '').trim();
     const len = (v?: string) => (v ?? '').trim().length;
 
-    const idErr = validateSecondaryPersonIdentificacion(p.identificacion, p.tipoDoc);
+    // Asegurados y beneficiarios de personas: siempre persona natural (sin RIF J/G/C).
+    const idErr = validateSecondaryPersonIdentificacion(p.identificacion, p.tipoDoc, { soloPersonaNatural: true });
     if (idErr) e.identificacion = idErr;
 
     if (req(p.nombre)) {
