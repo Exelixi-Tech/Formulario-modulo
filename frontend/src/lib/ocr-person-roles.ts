@@ -2,6 +2,20 @@ import type { PersonData } from '../types';
 import type { OcrFields } from './exelixi-handoff-types';
 import { extractTomadorFromCertificado, resolveOwnerTipoDoc } from './carnet-propietario';
 
+/**
+ * Titular distinto del tomador sin estado, ciudad o dirección. Pasa cuando el OCR del carnet (paso 3)
+ * crea el titular solo con identidad después de validar el paso 2; el Core y emision-api rechazan esa
+ * emisión y Arys no puede registrar la membresía.
+ */
+export function titularSinDireccion(
+  sameInsured: boolean | undefined,
+  asegurado: Partial<PersonData> | undefined,
+): boolean {
+  if (sameInsured !== false) return false;
+  const codigo = (v: unknown) => v != null && String(v).trim() !== '' && Number(v) > 0;
+  return !codigo(asegurado?.cestado) || !codigo(asegurado?.cciudad) || !String(asegurado?.direccion ?? '').trim();
+}
+
 function normalizeIdentificacionDigits(raw?: string | null): string {
   return String(raw ?? '').replace(/\D/g, '');
 }
