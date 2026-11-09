@@ -24,7 +24,7 @@ import {
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
 import { isRcvLaMundialFlow } from '../../lib/product';
-import { applyOcrPersonRolesFromDocuments } from '../../lib/ocr-person-roles';
+import { applyOcrPersonRolesFromDocuments, titularSinDireccion } from '../../lib/ocr-person-roles';
 import { TipoPlacaSelector } from '../../components/TipoPlacaSelector';
 import { placaMaxLength, placaPlaceholder, validatePlacaMessage } from '../../lib/placa-tipo';
 import { isQaDeploy } from '../../lib/deploy-env';
@@ -230,6 +230,15 @@ export function VehicleStep() {
   const isBinacional = rcvLaMundial && vehicle.tipoPlaca === 'binacional';
   const showToneladas = rcvLaMundial && isCategoriaToneladas(vehicle.ccategoria_uso);
 
+  const avisarTitularSinDireccion = () => {
+    toast.warning(
+      'Falta la dirección del titular',
+      'El carnet está a nombre de otra persona. Completa su estado, ciudad y dirección para continuar.',
+      8000,
+    );
+    useWizardStore.getState().goTo(2);
+  };
+
   // Al entrar desde cliente el scroll queda abajo (conductor habitual). Ir a datos del vehículo.
   useLayoutEffect(() => {
     window.scrollTo({ top: 0, left: 0, behavior: 'auto' });
@@ -245,10 +254,15 @@ export function VehicleStep() {
       setConductor,
     });
     driverFromOcrApplied.current = true;
+    // El carnet puede estar a nombre de otra persona: ese titular se creó solo con su identidad,
+    // después de validar el paso 2. Se vuelve al paso 2 para completar su dirección.
+    const st = useWizardStore.getState();
+    if (isRcvEmision && titularSinDireccion(st.sameInsured, st.asegurado)) avisarTitularSinDireccion();
   }, [
     cotizadorRcv,
     documents,
     hasDriver,
+    isRcvEmision,
     setAsegurado,
     setConductor,
     setHasDriver,
@@ -850,6 +864,14 @@ export function VehicleStep() {
     if (Object.keys(e).length > 0) {
       focusVehicleError(e);
       return false;
+    }
+
+    if (isRcvEmision) {
+      const st = useWizardStore.getState();
+      if (titularSinDireccion(st.sameInsured, st.asegurado)) {
+        avisarTitularSinDireccion();
+        return false;
+      }
     }
 
     // Validación remota La Mundial — solo emisión RCV completa
