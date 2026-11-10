@@ -241,6 +241,7 @@ export function VehicleStep() {
       setAsegurado,
       setHasDriver,
       setConductor,
+      getAsegurado: () => useWizardStore.getState().asegurado,
     });
     driverFromOcrApplied.current = true;
   }, [

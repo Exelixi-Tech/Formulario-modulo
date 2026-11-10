@@ -113,6 +113,7 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
             setAsegurado,
             setHasDriver,
             setConductor,
+            getAsegurado: () => useWizardStore.getState().asegurado,
           });
         }
       }
