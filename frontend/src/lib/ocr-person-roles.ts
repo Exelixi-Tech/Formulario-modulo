@@ -154,6 +154,29 @@ export interface OcrPersonRoleSetters {
   setAsegurado: (data: Partial<PersonData>) => void;
   setHasDriver: (v: boolean) => void;
   setConductor: (data: Partial<PersonData>) => void;
+  /** Titular actual del store: si es la misma persona del carnet, no se pisa lo que ya se llenó. */
+  getAsegurado?: () => Partial<PersonData> | undefined;
+}
+
+/**
+ * Datos del titular del carnet a aplicar sin borrar lo ya completado. Si el titular actual es la misma
+ * persona (misma identificación), solo se llenan los campos vacíos: al volver del paso 2 al 3 el OCR se
+ * reaplica y antes ponía fechaNac '' (y pisaba nombre/apellido corregidos), y Pagos bloqueaba el cobro.
+ */
+export function titularOcrSinPisar(
+  actual: Partial<PersonData> | undefined,
+  delCarnet: Partial<PersonData>,
+): Partial<PersonData> {
+  const id = (v: unknown) => normalizeIdentificacionDigits(String(v ?? ''));
+  if (!actual || !id(actual.identificacion) || id(actual.identificacion) !== id(delCarnet.identificacion)) {
+    return delCarnet;
+  }
+  const out: Partial<PersonData> = {};
+  for (const [k, v] of Object.entries(delCarnet) as [keyof PersonData, unknown][]) {
+    const previo = actual[k];
+    if (previo == null || String(previo).trim() === '') (out as Record<string, unknown>)[k] = v;
+  }
+  return out;
 }
 
 export function applyOcrPersonRoles(
@@ -166,7 +189,8 @@ export function applyOcrPersonRoles(
 
   setters.setSameInsured(roles.sameInsured);
   if (roles.asegurado) {
-    setters.setAsegurado(roles.asegurado);
+    const patch = titularOcrSinPisar(setters.getAsegurado?.(), roles.asegurado);
+    if (Object.keys(patch).length) setters.setAsegurado(patch);
   }
 
   if (roles.hasDriver && roles.conductor) {

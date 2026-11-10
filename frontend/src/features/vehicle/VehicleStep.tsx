@@ -252,6 +252,7 @@ export function VehicleStep() {
       setAsegurado,
       setHasDriver,
       setConductor,
+      getAsegurado: () => useWizardStore.getState().asegurado,
     });
     driverFromOcrApplied.current = true;
     // El carnet puede estar a nombre de otra persona: ese titular se creó solo con su identidad,
