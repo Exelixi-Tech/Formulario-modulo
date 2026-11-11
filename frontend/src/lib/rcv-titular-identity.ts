@@ -35,8 +35,10 @@ export function rcvIdentityKeepFromOcr(
     };
   }
   if (prefix === 'tom_') {
+    // Tomador jurídico elegido a mano (pagador con RIF J): se conserva la J, no vuelve al tipo de la cédula OCR.
+    const elegido = String(latest.tipoDoc ?? '').trim().toUpperCase();
     return {
-      tipoDoc: resolveRcvTomadorTipoDocFromCedula(documents.cedula?.ocr),
+      tipoDoc: elegido === 'J' ? 'J' : resolveRcvTomadorTipoDocFromCedula(documents.cedula?.ocr),
       identificacion: latest.identificacion ?? digits,
     };
   }
