@@ -49,14 +49,20 @@ import {
   validatePasaporte,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
-import { resolvePersonaJuridica, validateRifJuridicoEmitible } from '../../lib/tomador-juridico';
+import {
+  BENEF_PREFERENCIAL_PREFIX,
+  RAMOS_VIDA_BENEF_PREFERENCIAL,
+  resolvePersonaJuridica,
+  validateRifBeneficiarioPreferencial,
+  validateRifJuridicoEmitible,
+} from '../../lib/tomador-juridico';
 import {
   rcvIdentityKeepFromOcr,
   resolveRcvOcrIdentDigits,
   resolveRcvTitularTipoDocFromCert,
   shouldRunRcvSis2000Lookup,
 } from '../../lib/rcv-titular-identity';
-import type { FuneralPerson } from '../../types';
+import type { FuneralPerson, PersonData } from '../../types';
 import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
 import { resolveOcrPersonRoles } from '../../lib/ocr-person-roles';
@@ -119,6 +125,11 @@ function emptyFuneralBeneficiario(pporcen = 100): FuneralPerson {
     parentesco: '',
     pporcen,
   };
+}
+
+/** Beneficiario preferencial de Vida vacío (persona natural V por defecto). */
+function emptyBeneficiarioPreferencial(): PersonData {
+  return { tipoDoc: 'V', identificacion: '', nombre: '', apellido: '' };
 }
 
 /** Hay datos de beneficiario (OCR o captura). Un renglón vacío no obliga el paso. */
@@ -381,6 +392,18 @@ export function EmissionStep() {
   const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
   const checkPatrimonialesFlow = isPatrimoniales() || usesPatrimonialesStep();
+  /**
+   * Vida (ramo del SSO): beneficiario preferencial aparte de los beneficiarios por fallecimiento.
+   * Puede ser persona jurídica J/G/C (p. ej. un banco); va a adpoliza.cbeneficiario.
+   */
+  const preferencialVida =
+    checkFuneralFlow && personasProfesionFlow && !tarjetaFlow && RAMOS_VIDA_BENEF_PREFERENCIAL.includes(polizaCramo);
+  const benefPreferencial: PersonData = funeral.beneficiarioPreferencial ?? emptyBeneficiarioPreferencial();
+  const setBenefPreferencial = (patch: Partial<PersonData>) => {
+    const actual = useWizardStore.getState().funeral.beneficiarioPreferencial ?? emptyBeneficiarioPreferencial();
+    setFuneral({ beneficiarioPreferencial: { ...actual, ...patch } });
+  };
+  const benefPreferencialCiudades = useCiudades(benefPreferencial.cestado);
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
   const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
@@ -774,8 +797,10 @@ export function EmissionStep() {
     ) => {
       // RCV y tomador de personas con RIF J/G/C: nombre = razón social, sin apellido/sexo/estado civil.
       const { isJuridica, isJuridicaRcv } = juridicaDe(person.tipoDoc, prefix);
-      // Personas: titular y asegurado son siempre persona natural (el RIF jurídico solo va en el tomador).
-      const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_';
+      // Personas: titular y asegurado son siempre persona natural (el RIF jurídico solo va en el tomador
+      // y en el beneficiario preferencial de Vida).
+      const soloPersonaNatural =
+        personasProfesionFlow && prefix !== 'tom_' && prefix !== BENEF_PREFERENCIAL_PREFIX;
       // Personas: tomador y titular admiten pasaporte con letras (cid completo + cci_rif dígitos). RCV no.
       const permitirPasaporteAlfanumerico =
         personasProfesionFlow && (prefix === 'tom_' || prefix === 'aseg_');
@@ -816,6 +841,12 @@ export function EmissionStep() {
           PERSON_FIELD_LIMITS.venezuelanCedulaDigitsMax,
         );
         if (pjErr) e[`${prefix}identificacion`] = pjErr;
+      }
+      if (prefix === BENEF_PREFERENCIAL_PREFIX && !e[`${prefix}identificacion`]) {
+        // Beneficiario preferencial: RIF J/G/C con 9 dígitos; pasaporte solo numérico (cbeneficiario numeric).
+        const prefErr =
+          validateRifBeneficiarioPreferencial(person.tipoDoc, person.identificacion) ?? pasaporteErr;
+        if (prefErr) e[`${prefix}identificacion`] = prefErr;
       }
 
       if (req(person.nombre)) {
@@ -945,6 +976,9 @@ export function EmissionStep() {
       if (filled > 0 && pctSum !== 100) {
         e.funeral_benef_pct = 'El porcentaje de beneficio debe sumar 100%';
       }
+      if (preferencialVida && funeral.conBeneficiarioPreferencial) {
+        validatePerson(benefPreferencial, BENEF_PREFERENCIAL_PREFIX, { secondaryIdent: true });
+      }
     } else if (hasBeneficiary && !tarjetaFlow && !checkPatrimonialesFlow) {
       validatePerson(beneficiario, 'benef_', { secondaryIdent: true });
     }
@@ -1016,7 +1050,8 @@ export function EmissionStep() {
     opts?: { secondaryIdent?: boolean; funeralInsured?: boolean },
   ) => {
     const { isJuridica, isJuridicaRcv } = juridicaDe(person.tipoDoc, prefix);
-    const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_';
+    const esPreferencial = prefix === BENEF_PREFERENCIAL_PREFIX;
+    const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_' && !esPreferencial;
 
     return (
     <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
@@ -1037,6 +1072,8 @@ export function EmissionStep() {
                 }
                 return 'Al salir del campo se buscan los datos en Sis2000';
               })()
+            : esPreferencial
+              ? 'Persona natural (V, E, P) o jurídica (J, G, C con 9 dígitos), p. ej. un banco'
             : checkFuneralFlow
               ? lookupLoading[prefix]
                 ? 'Consultando Sis2000…'
@@ -1056,6 +1093,7 @@ export function EmissionStep() {
           }
           loading={Boolean(lookupLoading[prefix])}
           allowJuridico={!soloPersonaNatural}
+          allowJuridicoGC={esPreferencial}
           onTipoDocChange={(v) => {
             lastLookupCid.current[prefix] = '';
             setPerson({ tipoDoc: v });
@@ -1086,7 +1124,7 @@ export function EmissionStep() {
                   }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
+              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false) && !esPreferencial
                 ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
@@ -1150,12 +1188,14 @@ export function EmissionStep() {
         exelixiFlow={exelixiFlow}
         showPais={showPaisDireccion && (prefix === 'tom_' || prefix === 'aseg_')}
       />
+      {/* Beneficiario preferencial jurídico: sin fecha (Sis2000 la guarda en NULL, como el tomador J). */}
+      {!(esPreferencial && isJuridica) && (
       <Field
         anchor={`cli-${prefix}fechaNac`}
         label={isJuridicaRcv ? 'Fecha de Constitución' : isJuridica ? 'Fecha de Constitución *' : 'Fecha de Nac. *'}
         error={errors[`${prefix}fechaNac`]}
         hint={
-          isJuridica
+          isJuridica || esPreferencial
             ? undefined
             : (() => {
                 const edad = edadCumplida(person.fechaNac);
@@ -1173,6 +1213,7 @@ export function EmissionStep() {
           max={new Date().toISOString().split('T')[0]}
         />
       </Field>
+      )}
       {!isJuridica && (
         <Field anchor={`cli-${prefix}sexo`} label="Sexo *" error={errors[`${prefix}sexo`]}>
           <SearchSelect
@@ -1531,6 +1572,28 @@ export function EmissionStep() {
             {hasBeneficiary && renderPersonForm(beneficiario, setBeneficiario, 'benef_', beneficiarioCiudades, { secondaryIdent: true })}
           </SectionCard>
         ) : null}
+
+        {preferencialVida && (
+          <SectionCard
+            Icon={Heart}
+            title="Datos del Beneficiario Preferencial"
+            description="Opcional. Puede ser una persona o una empresa (p. ej. un banco con RIF J, G o C)."
+          >
+            <ToggleSwitch
+              checked={Boolean(funeral.conBeneficiarioPreferencial)}
+              onChange={(v) => setFuneral({ conBeneficiarioPreferencial: v })}
+              label="¿Desea agregar un beneficiario preferencial a la póliza?"
+            />
+            {funeral.conBeneficiarioPreferencial &&
+              renderPersonForm(
+                benefPreferencial,
+                setBenefPreferencial,
+                BENEF_PREFERENCIAL_PREFIX,
+                benefPreferencialCiudades,
+                { secondaryIdent: true },
+              )}
+          </SectionCard>
+        )}
       </div>
     </div>
   );
