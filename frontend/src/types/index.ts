@@ -264,11 +264,6 @@ export interface VehicleData {
   tipoCarnet?: 'nacional' | 'binacional';
   /** Peso del vehículo en toneladas — solo categoría de uso 11 (>12 TM). */
   ntoneladas?: number;
-  /**
-   * RCV Binacional: tripulantes (1–3, por defecto 1). Viaja a Emisión dentro del vehículo y es
-   * la base de la cotización/emisión; nacional y extranjera no lo llevan.
-   */
-  tripulantes?: number;
   /** Porcentaje recargo RCV (masustac.porcenta). 0 = No aplica. */
   precargorcv?: number;
   /** Código masustac.csustanc del recargo seleccionado (auditoría). */

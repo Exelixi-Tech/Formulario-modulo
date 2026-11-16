@@ -1,4 +1,4 @@
-import { ChevronDown, Globe2, Lock, MapPin, Flag, Users } from 'lucide-react';
+import { Globe2, Lock, MapPin, Flag } from 'lucide-react';
 
 import { cn } from '../lib/utils';
 import { ocrIndicaPlacaExtranjera } from '../lib/placa-tipo';
@@ -14,17 +14,7 @@ type Props = {
   /** Ocultar opción binacional (flujos sin RCV La Mundial). */
   showBinacional?: boolean;
   disabled?: boolean;
-  /** RCV Binacional: tripulantes elegidos (1–3). El selector solo se muestra con `onTripulantesChange`. */
-  tripulantes?: number;
-  onTripulantesChange?: (tripulantes: number) => void;
 };
-
-/** RCV Binacional: máximo de tripulantes que se pueden declarar (mínimo y valor por defecto: 1). */
-const TRIPULANTES_MAX = 3;
-
-function normalizeTripulantes(value: unknown): number {
-  return Math.min(TRIPULANTES_MAX, Math.max(1, Math.trunc(Number(value)) || 1));
-}
 
 const ALL_OPTIONS: {
   id: TipoPlaca;
@@ -44,8 +34,6 @@ export function TipoPlacaSelector({
   onChange,
   showBinacional = true,
   disabled = false,
-  tripulantes,
-  onTripulantesChange,
 }: Props) {
   const forceExtranjera = ocrIndicaPlacaExtranjera(certOcr);
   const extranjeraBlocked = !forceExtranjera;
@@ -132,36 +120,6 @@ export function TipoPlacaSelector({
             );
           })}
         </div>
-
-        {/* RCV Binacional: tripulantes (puestos de la cobertura de ocupantes) */}
-        {showBinacional && value === 'binacional' && onTripulantesChange && (
-          <div>
-            <label
-              htmlFor="rcv-tripulantes"
-              className="text-[0.62rem] font-black text-slate-500 uppercase tracking-widest mb-2 inline-flex items-center gap-1.5"
-            >
-              <Users size={11} className="text-indigo-500" />
-              Tripulantes
-            </label>
-            <div className="relative sm:max-w-xs">
-              <select
-                id="rcv-tripulantes"
-                value={String(normalizeTripulantes(tripulantes))}
-                disabled={disabled}
-                onChange={(e) => onTripulantesChange(normalizeTripulantes(e.target.value))}
-                className="w-full pl-4 pr-10 py-3 rounded-xl border-2 border-slate-200 bg-white text-sm font-bold text-slate-900 appearance-none cursor-pointer hover:border-indigo-300 focus:border-indigo-500 focus:outline-none focus:ring-2 focus:ring-indigo-100 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:bg-slate-50"
-              >
-                {Array.from({ length: TRIPULANTES_MAX }, (_, i) => i + 1).map((n) => (
-                  <option key={n} value={String(n)}>{n}</option>
-                ))}
-              </select>
-              <ChevronDown size={16} className="absolute right-4 top-1/2 -translate-y-1/2 text-slate-500 pointer-events-none" />
-            </div>
-            <p className="mt-1.5 text-[0.7rem] text-slate-500">
-              Vehículo binacional: la prima se calcula según el número de tripulantes (máximo {TRIPULANTES_MAX}).
-            </p>
-          </div>
-        )}
 
         {forceExtranjera && (
           <p className="text-xs text-amber-900 bg-amber-50 border border-amber-300 rounded-xl px-3 py-2.5 flex items-start gap-2">
