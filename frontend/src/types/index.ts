@@ -230,12 +230,6 @@ export interface FuneralData {
   healthAnswers?: Record<string, unknown>;
   /** true cuando el cuestionario fue completado. */
   healthQuestionnaireDone?: boolean;
-  /**
-   * Vida: beneficiario preferencial (adpoliza.cbeneficiario), aparte de los beneficiarios por
-   * fallecimiento. Puede ser persona jurídica J/G/C (p. ej. un banco): nombre = razón social.
-   */
-  conBeneficiarioPreferencial?: boolean;
-  beneficiarioPreferencial?: PersonData;
 }
 
 export interface VehicleData {
