@@ -313,8 +313,6 @@ export function VehicleStep() {
     if (nextBi !== prevBi) {
       setVehicle({
         tipoPlaca,
-        // Tripulantes solo existe en binacional (por defecto 1); al salir se quita.
-        tripulantes: nextBi ? 1 : undefined,
         cmarca: '',
         marca: '',
         cmodelo: '',
@@ -333,7 +331,6 @@ export function VehicleStep() {
     if (rcvLaMundial || vehicle.tipoPlaca !== 'binacional') return;
     setVehicle({
       tipoPlaca: 'nacional',
-      tripulantes: undefined,
       cmarca: '',
       marca: '',
       cmodelo: '',
@@ -1011,10 +1008,6 @@ export function VehicleStep() {
               onChange={setTipoPlaca}
               showBinacional={rcvLaMundial}
               disabled={qaIdentLock}
-              tripulantes={vehicle.tripulantes}
-              onTripulantesChange={
-                isBinacional && !tarjetaFlow ? (tripulantes) => setVehicle({ tripulantes }) : undefined
-              }
             />
           )}
 
