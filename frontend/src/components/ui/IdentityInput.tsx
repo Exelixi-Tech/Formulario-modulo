@@ -20,6 +20,12 @@ const NATIONALITY_OPTIONS: { value: string; label: string }[] = [
   { value: 'P', label: 'P - Pasaporte' },
 ];
 
+/** RIF G (gubernamental) y C (comunal): solo donde se pide (beneficiario preferencial de Vida). */
+const JURIDICO_GC_OPTIONS: { value: string; label: string }[] = [
+  { value: 'G', label: 'G - Gubernamental' },
+  { value: 'C', label: 'C - Comunal' },
+];
+
 interface IdentityInputProps {
   tipoDoc: string;
   identificacion: string;
@@ -35,6 +41,8 @@ interface IdentityInputProps {
   readOnly?: boolean;
   /** false: oculta J (titular, asegurado o beneficiario de personas: solo persona natural). */
   allowJuridico?: boolean;
+  /** true: además de J ofrece G y C (beneficiario preferencial de Vida). */
+  allowJuridicoGC?: boolean;
 }
 
 /** Pasaporte: alfanumérico en mayúsculas, hasta 15 caracteres. */
@@ -52,13 +60,19 @@ export function IdentityInput({
   maxLength = PERSON_FIELD_LIMITS.identificacion,
   readOnly = false,
   allowJuridico = true,
+  allowJuridicoGC = false,
 }: IdentityInputProps) {
   const esPasaporte = tipoDoc === 'P';
   const maxLen = esPasaporte ? Math.max(maxLength, PASAPORTE_MAX) : maxLength;
   // Si ya viene J (OCR), se deja visible para que el usuario vea el valor y lo cambie.
-  const options = NATIONALITY_OPTIONS.filter(
+  const options = [
+    ...NATIONALITY_OPTIONS,
+    ...(allowJuridico && allowJuridicoGC ? JURIDICO_GC_OPTIONS : []),
+  ].filter(
     (o) => allowJuridico || o.value !== 'J' || tipoDoc === 'J',
   );
+  const soloDigitos =
+    ['V', 'E', 'J'].includes(tipoDoc) || (allowJuridicoGC && ['G', 'C'].includes(tipoDoc));
   return (
     <div
       className={
@@ -99,13 +113,13 @@ export function IdentityInput({
       <input
         id={inputId}
         type="text"
-        inputMode={['V', 'E', 'J'].includes(tipoDoc) ? 'numeric' : 'text'}
+        inputMode={soloDigitos ? 'numeric' : 'text'}
         maxLength={maxLen}
         value={identificacion}
         disabled={loading || readOnly}
         onChange={(e) => {
           let val = e.target.value;
-          if (['V', 'E', 'J'].includes(tipoDoc)) {
+          if (soloDigitos) {
             val = val.replace(/\D/g, '');
           } else if (esPasaporte) {
             val = val.toUpperCase().replace(/[^A-Z0-9]/g, '');
