@@ -49,7 +49,12 @@ import {
   validatePasaporte,
   validateSecondaryPersonIdentificacion,
 } from '../../lib/person-identificacion';
-import { resolvePersonaJuridica, validateRifJuridicoEmitible } from '../../lib/tomador-juridico';
+import {
+  beneficiarioJuridicoPermitido,
+  resolvePersonaJuridica,
+  validateRifBeneficiarioJuridico,
+  validateRifJuridicoEmitible,
+} from '../../lib/tomador-juridico';
 import {
   rcvIdentityKeepFromOcr,
   resolveRcvOcrIdentDigits,
@@ -381,6 +386,13 @@ export function EmissionStep() {
   const manualIdentEdit = useRef<Record<string, boolean>>({});
   const checkFuneralFlow = isFunerario() || usesFuneralStep();
   const checkPatrimonialesFlow = isPatrimoniales() || usesPatrimonialesStep();
+  /**
+   * Personas (Vida y demás, salvo funerario y tarjeta): un beneficiario de la lista puede ser persona
+   * jurídica J/G/C (p. ej. «ARCA FINANCE C.A.», J-40084902-0, parentesco «Socio (a)»).
+   */
+  const benefJuridicoOk = personasProfesionFlow && !tarjetaFlow && beneficiarioJuridicoPermitido(metadataCanal);
+  /** Parentesco «Socio (a)» del catálogo (se preselecciona al elegir un RIF jurídico). */
+  const parentescoSocio = (catalogs.parentescos ?? []).find((p) => /^socio/i.test(String(p.label ?? '').trim()));
   const tomOcrFnac = useWizardStore((s) => s.documents.cedula?.ocr?.fechaNacimiento ?? '');
   const titOcrFnac = useWizardStore((s) => s.documents.cedula_titular?.ocr?.fechaNacimiento ?? '');
   const certOcr = useWizardStore((s) => s.documents.certificado?.ocr);
@@ -923,18 +935,25 @@ export function EmissionStep() {
       bens.forEach((b, i) => {
         if (!funeralBeneficiarioTieneDatos(b)) return;
         filled += 1;
-        const idErr = validateSecondaryPersonIdentificacion(b.identificacion, b.tipoDoc, {
-          soloPersonaNatural: personasProfesionFlow,
-        });
+        // Beneficiario jurídico (J/G/C): razón social y RIF de 9 dígitos; sin apellido, fecha ni sexo.
+        const benJur = benefJuridicoOk && isPersonaJuridica(b.tipoDoc);
+        const idErr =
+          validateSecondaryPersonIdentificacion(b.identificacion, b.tipoDoc, {
+            soloPersonaNatural: personasProfesionFlow && !benJur,
+          }) ?? (benJur ? validateRifBeneficiarioJuridico(b.tipoDoc, b.identificacion) : undefined);
         if (idErr) e[`fben_${i}_id`] = idErr;
-        if (!(b.nombre ?? '').trim()) e[`fben_${i}_nombre`] = 'El nombre es obligatorio';
-        if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
-        const fnacErr = isPatrimoniales()
-          ? validateFecha(b.fechaNac)
-          : (!(b.fechaNac ?? '').trim() ? 'La fecha de nacimiento es obligatoria' : undefined);
-        if (fnacErr) e[`fben_${i}_fnac`] = fnacErr;
+        if (!(b.nombre ?? '').trim()) {
+          e[`fben_${i}_nombre`] = benJur ? 'La razón social es obligatoria' : 'El nombre es obligatorio';
+        }
+        if (!benJur) {
+          if (!(b.apellido ?? '').trim()) e[`fben_${i}_apellido`] = 'El apellido es obligatorio';
+          const fnacErr = isPatrimoniales()
+            ? validateFecha(b.fechaNac)
+            : (!(b.fechaNac ?? '').trim() ? 'La fecha de nacimiento es obligatoria' : undefined);
+          if (fnacErr) e[`fben_${i}_fnac`] = fnacErr;
+          if (!(b.sexo ?? '').trim()) e[`fben_${i}_sexo`] = 'Selecciona el sexo';
+        }
         if (!(b.parentesco ?? '').trim()) e[`fben_${i}_parentesco`] = 'El parentesco es obligatorio';
-        if (!(b.sexo ?? '').trim()) e[`fben_${i}_sexo`] = 'Selecciona el sexo';
         const pct = Number(b.pporcen);
         if (!Number.isFinite(pct) || pct < 1 || pct > 100) {
           e[`fben_${i}_pct`] = 'El % de beneficio debe estar entre 1 y 100';
@@ -1394,7 +1413,9 @@ export function EmissionStep() {
             statusTone={errors.funeral_benef_pct || errors.funeral_benef ? 'warning' : 'neutral'}
           >
             <div className="space-y-4">
-              {(funeral.beneficiarios ?? []).map((ben, idx) => (
+              {(funeral.beneficiarios ?? []).map((ben, idx) => {
+                const benJur = benefJuridicoOk && isPersonaJuridica(ben.tipoDoc);
+                return (
                 <div key={idx} className="rounded-xl border border-slate-200 bg-slate-50/50 p-4 space-y-3">
                   <div className="flex items-center justify-between">
                     <span className="text-[0.7rem] font-black uppercase tracking-wider text-fuchsia-600">
@@ -1413,7 +1434,12 @@ export function EmissionStep() {
                     </button>
                   </div>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    <Field anchor={`cli-fben_${idx}_parentesco`} label="Parentesco *" error={errors[`fben_${idx}_parentesco`]}>
+                    <Field
+                      anchor={`cli-fben_${idx}_parentesco`}
+                      label="Parentesco *"
+                      error={errors[`fben_${idx}_parentesco`]}
+                      hint={benJur ? 'Empresa o banco: parentesco «Socio (a)»' : undefined}
+                    >
                       <SearchSelect
                         value={ben.parentesco}
                         options={parentescoOptions}
@@ -1447,8 +1473,22 @@ export function EmissionStep() {
                         tipoDoc={ben.tipoDoc || 'V'}
                         identificacion={ben.identificacion}
                         maxLength={secondaryIdentificacionMax(ben.tipoDoc)}
-                        allowJuridico={!personasProfesionFlow}
-                        onTipoDocChange={(v) => patchFuneralBeneficiario(idx, { tipoDoc: v })}
+                        allowJuridico={!personasProfesionFlow || benefJuridicoOk}
+                        allowJuridicoGC={benefJuridicoOk}
+                        onTipoDocChange={(v) =>
+                          patchFuneralBeneficiario(idx, {
+                            tipoDoc: v,
+                            // Jurídico: sin apellido, sexo ni fecha; parentesco «Socio (a)» si aún no eligió.
+                            ...(benefJuridicoOk && isPersonaJuridica(v)
+                              ? {
+                                apellido: '',
+                                sexo: '',
+                                fechaNac: '',
+                                ...(!ben.parentesco && parentescoSocio ? { parentesco: String(parentescoSocio.code) } : {}),
+                              }
+                              : {}),
+                          })
+                        }
                         onIdentificacionChange={(v) =>
                           patchFuneralBeneficiario(idx, {
                             identificacion: v.slice(0, secondaryIdentificacionMax(ben.tipoDoc)),
@@ -1456,16 +1496,25 @@ export function EmissionStep() {
                         }
                       />
                     </Field>
-                    <Field anchor={`cli-fben_${idx}_nombre`} label="Nombre *" error={errors[`fben_${idx}_nombre`]}>
+                    <Field
+                      anchor={`cli-fben_${idx}_nombre`}
+                      label={benJur ? 'Razón social *' : 'Nombre *'}
+                      error={errors[`fben_${idx}_nombre`]}
+                    >
                       <Input
                         value={ben.nombre}
+                        placeholder={benJur ? 'Razón social' : undefined}
                         onChange={(ev) =>
                           patchFuneralBeneficiario(idx, {
-                            nombre: clipLetters(ev.target.value, PERSON_FIELD_LIMITS.nombre),
+                            nombre: benJur
+                              ? ev.target.value.replace(/[^\p{L}\p{N} .,&'()-]/gu, '').slice(0, PERSON_FIELD_LIMITS.nombre)
+                              : clipLetters(ev.target.value, PERSON_FIELD_LIMITS.nombre),
                           })
                         }
                       />
                     </Field>
+                    {!benJur && (
+                    <>
                     <Field anchor={`cli-fben_${idx}_apellido`} label="Apellido *" error={errors[`fben_${idx}_apellido`]}>
                       <Input
                         value={ben.apellido}
@@ -1499,9 +1548,12 @@ export function EmissionStep() {
                         onChange={(ev) => patchFuneralBeneficiario(idx, { fechaNac: ev.target.value })}
                       />
                     </Field>
+                    </>
+                    )}
                   </div>
                 </div>
-              ))}
+                );
+              })}
               <button
                 type="button"
                 className="inline-flex items-center gap-2 px-4 py-2.5 rounded-xl border-2 border-dashed border-fuchsia-200 text-fuchsia-600 text-sm font-bold"

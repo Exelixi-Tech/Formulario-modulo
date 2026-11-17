@@ -49,3 +49,34 @@ export function validateRifJuridicoEmitible(
   }
   return undefined;
 }
+
+/** RIF jurídico de un beneficiario: letra + 9 dígitos (J-40084902-0 se escribe 400849020). */
+export const RIF_JURIDICO_BENEFICIARIO_DIGITOS = 9;
+
+/**
+ * Personas (Vida y demás, salvo funerario): los beneficiarios por fallecimiento pueden ser persona
+ * jurídica J/G/C (p. ej. un banco o empresa con parentesco «Socio (a)»), como en SysIP.
+ * Funerario (cproducto 57 o xproducto «funer…») sigue solo con persona natural.
+ * No depende de cramo: el SSO de algunos productos no lo manda.
+ */
+export function beneficiarioJuridicoPermitido(meta: Record<string, unknown> | null | undefined): boolean {
+  const cproducto = String(meta?.cproducto ?? '').trim();
+  const xproducto = String(meta?.xproducto ?? '').trim().toLowerCase();
+  return cproducto !== '57' && !xproducto.includes('funer');
+}
+
+/**
+ * Beneficiario jurídico (J/G/C): el RIF lleva exactamente 9 dígitos.
+ * Devuelve el error a mostrar o undefined (persona natural: undefined).
+ */
+export function validateRifBeneficiarioJuridico(
+  tipoDoc: string | undefined,
+  identificacion: string | undefined,
+): string | undefined {
+  if (!isPersonaJuridica(tipoDoc)) return undefined;
+  const digits = String(identificacion ?? '').replace(/\D/g, '');
+  if (digits.length !== RIF_JURIDICO_BENEFICIARIO_DIGITOS) {
+    return `El RIF debe tener la letra y ${RIF_JURIDICO_BENEFICIARIO_DIGITOS} dígitos (ej. J-400849020)`;
+  }
+  return undefined;
+}
