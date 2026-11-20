@@ -4,6 +4,7 @@ import './index.css'
 import App from './App.tsx'
 import { FormularioConfigPanel } from './config/FormularioConfigPanel.tsx'
 import bridgeReady from './lib/bridge'
+import { cargarCotizacionFormulario } from './lib/cotizacion-formulario'
 import { NexusGuard } from './nexus/NexusGuard'
 import { applyExelixiOcrHandoff } from './lib/exelixi-catalog'
 import { applyOcrPersonRolesFromDocuments } from './lib/ocr-person-roles'
@@ -131,6 +132,8 @@ function ExelixiHandoffBootstrap({ children }: { children: ReactNode }) {
       }
       if (cancelled) return;
       runBootstrap();
+      // Emitir RCV desde cotización: después del OCR hidratado, fija vehículo/tomador y compara el carnet.
+      void cargarCotizacionFormulario();
     })();
 
     return () => { cancelled = true; };

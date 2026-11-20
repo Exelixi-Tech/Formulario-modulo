@@ -415,8 +415,34 @@ async function getPlanesPersonas(cramo = 9, canal = {}) {
   return resBody.data?.planes ?? resBody.planes ?? [];
 }
 
+/**
+ * GET /api/v1/cotizaciones-auto/:cproces — cotización de automóvil de SysIP (misma lectura que Emisión).
+ * Errores con `code`: COTIZACION_NO_EXISTE (404) o COTIZACION_NO_DISPONIBLE (502).
+ */
+async function getCotizacionAuto(cproces) {
+  const coded = (code, message, httpStatus) => Object.assign(new Error(message), { code, httpStatus });
+  let response;
+  try {
+    response = await axios.get(
+      `${getBaseUrl()}/api/v1/cotizaciones-auto/${encodeURIComponent(String(cproces))}`,
+      await axiosOpts({ validateStatus: () => true }),
+    );
+  } catch (err) {
+    throw coded('COTIZACION_NO_DISPONIBLE', `No se pudo consultar la cotización: ${err.message}`, 502);
+  }
+  const body = response.data ?? {};
+  if (response.status === 404 || body.code === 'COTIZACION_NO_EXISTE') {
+    throw coded('COTIZACION_NO_EXISTE', body.message || `No existe la cotización ${cproces}.`, 404);
+  }
+  if (response.status >= 200 && response.status < 300 && body.data && typeof body.data === 'object') {
+    return body.data;
+  }
+  throw coded('COTIZACION_NO_DISPONIBLE', body.message || `HTTP ${response.status} consultando la cotización ${cproces}.`, 502);
+}
+
 module.exports = {
   getBaseUrl,
+  getCotizacionAuto,
   getTimeout,
   validateEmissionAutoViaNestApi,
   searchProprietaryViaNestApi,

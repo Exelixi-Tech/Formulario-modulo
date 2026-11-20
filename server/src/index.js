@@ -21,6 +21,7 @@ const catalogoRoutes = require('./routes/catalogo');
 const valrepRoutes   = require('./routes/valrep');
 const emissionsRoutes = require('./routes/emissions');
 const personasRoutes = require('./routes/personas');
+const rcvCotizacionRoutes = require('./routes/rcvCotizacion');
 const nexusAuth      = require('./middleware/nexusAuth');
 const { reportExpressError } = require('./services/monitorReporter');
 
@@ -56,6 +57,7 @@ app.use('/api/catalogo', nexusAuth, catalogoRoutes);
 app.use('/api/valrep',   nexusAuth, valrepRoutes);
 app.use('/api/emissions', nexusAuth, emissionsRoutes);
 app.use('/api/personas', nexusAuth, personasRoutes);
+app.use('/api/rcv-cotizacion', nexusAuth, rcvCotizacionRoutes);
 
 app.use((err, req, res, _next) => {
   console.error('[modulo-formulario] error:', err);

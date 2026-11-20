@@ -109,6 +109,7 @@ async function nexusAuth(req, res, next) {
         if (decoded && typeof decoded === 'object') {
           req.empresa = { id: decoded.empresaId };
           req.submoduloId = decoded.submoduloId;
+          req.nexusMetadata = decoded.metadata && typeof decoded.metadata === 'object' ? decoded.metadata : {};
         }
       } catch { /* ignore */ }
     }
@@ -159,6 +160,8 @@ async function nexusAuth(req, res, next) {
     req.empresa = { id: payload.empresaId };
     req.submoduloId = payload.submoduloId;
     req.nexusToken = token;
+    // Metadata firmada del SSO (p. ej. cotizacionID de SysIP); las rutas la leen de aquí, nunca del body.
+    req.nexusMetadata = payload.metadata && typeof payload.metadata === 'object' ? payload.metadata : {};
 
     // ── Heartbeat: renueva el token en BD, verifica empresa activa y
     //    obtiene un nuevo access_token (1h) con la misma metadata original.

@@ -41,6 +41,8 @@ interface IdentityInputProps {
   allowJuridico?: boolean;
   /** true: además de J ofrece G y C (beneficiario preferencial de Vida). */
   allowJuridicoGC?: boolean;
+  /** true: solo lectura (p. ej. tomador fijado por una cotización). */
+  disabled?: boolean;
 }
 
 /** Pasaporte: alfanumérico en mayúsculas, hasta 15 caracteres. */
@@ -58,6 +60,7 @@ export function IdentityInput({
   maxLength = PERSON_FIELD_LIMITS.identificacion,
   allowJuridico = true,
   allowJuridicoGC = false,
+  disabled = false,
 }: IdentityInputProps) {
   const esPasaporte = tipoDoc === 'P';
   const maxLen = esPasaporte ? Math.max(maxLength, PASAPORTE_MAX) : maxLength;
@@ -84,7 +87,7 @@ export function IdentityInput({
           aria-label="Tipo de documento"
           value={tipoDoc || 'V'}
           onChange={(e) => onTipoDocChange(e.target.value)}
-          disabled={loading}
+          disabled={loading || disabled}
           className={
             'h-full appearance-none cursor-pointer bg-slate-50/70 ' +
             'pl-3.5 pr-8 py-2.5 ' +
@@ -113,7 +116,7 @@ export function IdentityInput({
         inputMode={soloDigitos ? 'numeric' : 'text'}
         maxLength={maxLen}
         value={identificacion}
-        disabled={loading}
+        disabled={loading || disabled}
         onChange={(e) => {
           let val = e.target.value;
           if (soloDigitos) {
