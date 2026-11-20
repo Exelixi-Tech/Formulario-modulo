@@ -777,3 +777,24 @@ export async function checkFuneralCedulaPoliza(
     throw err;
   }
 }
+
+/** Emitir RCV desde cotización: vehículo y tomador de la cotización del token (GET /api/rcv-cotizacion/vehiculo). */
+export interface CotizacionFormulario {
+  cproces: string;
+  tomador: { tipoDoc: string | null; documento: string | null; nombre: string };
+  vehiculo: {
+    marca: { codigo: string | number | null; nombre: string } | null;
+    modelo: { codigo: string | number | null; nombre: string } | null;
+    version: { codigo: string | number | null; nombre: string } | null;
+    anio: number | null;
+    uso: { codigo: string | number | null; nombre: string } | null;
+    tipo: { codigo: string | number | null; nombre: string } | null;
+    puestos: number | null;
+    toneladas: number | null;
+    tipoPlaca: string | null;
+  };
+}
+
+export const rcvCotizacionApi = {
+  vehiculo: () => api.get<{ success: boolean; data: CotizacionFormulario }>('/rcv-cotizacion/vehiculo'),
+};

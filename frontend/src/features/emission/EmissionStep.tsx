@@ -2,6 +2,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useWizardStore } from '../../store/wizardStore';
 import { Field, Input, Textarea } from '../../components/ui/FormField';
 import { IdentityInput } from '../../components/ui/IdentityInput';
+import { useCotizacionFija } from '../../lib/cotizacion-formulario';
 import { ToggleSwitch } from '../../components/ui/ToggleSwitch';
 import { SearchSelect } from '../../components/ui/SearchSelect';
 import { PersonLocationFields } from '../../components/PersonLocationFields';
@@ -271,6 +272,7 @@ export function EmissionStep() {
   const exelixiFlow = isExelixiCatalogFlow();
   const tarjetaFlow = shouldUseTarjetaPublicApi();
   const isRcvEmision = isRcvLaMundialFlow() && !isCotizadorFlow();
+  const cotizacionFija = useCotizacionFija();
   const producto = getProductId();
   const skipBeneficiarioPreferencial = tarjetaFlow || producto === 'patrimoniales';
   const { config: formConfig } = useProductConfig(EMPRESA_ID, producto, 'formulario');
@@ -973,6 +975,8 @@ export function EmissionStep() {
   ) => {
     const { isJuridica, isJuridicaRcv } = juridicaDe(person.tipoDoc, prefix);
     const soloPersonaNatural = personasProfesionFlow && prefix !== 'tom_';
+    // Emitir desde cotización: documento y nombre del tomador son los de la cotización.
+    const identidadFija = cotizacionFija && prefix === 'tom_';
 
     return (
       <div className="mt-4 grid grid-cols-1 sm:grid-cols-2 gap-4 animate-fade-in">
@@ -981,7 +985,9 @@ export function EmissionStep() {
           label={opts?.funeralInsured ? 'Tipo Doc. Identidad *' : 'Cédula o documento *'}
           error={errors[`${prefix}identificacion`]}
           hint={
-            isRcvEmision
+            identidadFija
+              ? 'Dato fijo de la cotización'
+              : isRcvEmision
               ? (() => {
                 const ocrId = resolveRcvOcrIdentDigits(
                   prefix,
@@ -1013,6 +1019,7 @@ export function EmissionStep() {
                 : PERSON_FIELD_LIMITS.identificacion
             }
             loading={Boolean(lookupLoading[prefix])}
+            disabled={identidadFija}
             allowJuridico={!soloPersonaNatural}
             onTipoDocChange={(v) => {
               lastLookupCid.current[prefix] = '';
@@ -1065,6 +1072,7 @@ export function EmissionStep() {
             }
             placeholder={isJuridicaRcv ? 'Razón social' : 'Nombre'}
             maxLength={PERSON_FIELD_LIMITS.nombre}
+            disabled={identidadFija}
           />
         </Field>
         {!isJuridica && (
@@ -1074,6 +1082,7 @@ export function EmissionStep() {
               onChange={(e) => setPerson({ apellido: clipLetters(e.target.value, PERSON_FIELD_LIMITS.apellido) })}
               placeholder="Apellido"
               maxLength={PERSON_FIELD_LIMITS.apellido}
+              disabled={identidadFija}
             />
           </Field>
         )}

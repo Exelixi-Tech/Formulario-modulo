@@ -28,6 +28,7 @@ import { applyOcrPersonRolesFromDocuments } from '../../lib/ocr-person-roles';
 import { TipoPlacaSelector } from '../../components/TipoPlacaSelector';
 import { placaMaxLength, placaPlaceholder, validatePlacaMessage } from '../../lib/placa-tipo';
 import { isQaDeploy } from '../../lib/deploy-env';
+import { useCotizacionFija, useCotizacionFormulario } from '../../lib/cotizacion-formulario';
 import { findBestInmaMarca } from '../../lib/inma-marca-match';
 import {
   isCategoriaToneladas,
@@ -371,9 +372,13 @@ export function VehicleStep() {
   /** QA: placa/serial editables para pruebas; no auto-bloquear INMA. */
   const qaOcrLock = isQaDeploy() && hasOcr;
   const qaIdentLock = false;
-  /** Solo se bloquean año/marca/modelo si el usuario confirma (nunca en QA). */
-  const inmaBasicsLocked = !isQaDeploy() && verified;
-  const versionLocked = false;
+  /** Emitir desde cotización: año, marca, modelo, versión y uso son los de la cotización. */
+  const cotizacionFija = useCotizacionFija();
+  const avisoCotizacion = useCotizacionFormulario((s) => s.aviso);
+  const errorCotizacion = useCotizacionFormulario((s) => s.error);
+  /** Solo se bloquean año/marca/modelo si el usuario confirma (nunca en QA) o si vienen de la cotización. */
+  const inmaBasicsLocked = cotizacionFija || (!isQaDeploy() && verified);
+  const versionLocked = cotizacionFija;
 
   // ── Cargar rango de años (nacional vs binacional) ─────────────────────────
   useEffect(() => {
@@ -563,6 +568,7 @@ export function VehicleStep() {
    * Preselecciona el uso y deja el campo bloqueado (mismo valor va a planes).
    */
   useEffect(() => {
+    if (cotizacionFija) return; // el uso es el de la cotización
     if (loadCu || !vehicle.cversion || categoriasUso.length === 0) return;
 
     const ver = versiones.find((v) => String(v.cversion) === String(vehicle.cversion));
@@ -595,7 +601,7 @@ export function VehicleStep() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [categoriasUso, vehicle.cversion, vehicle.ccategotr, versiones, loadCu]);
 
-  const usoLockedByCcategotr = (() => {
+  const usoLockedByCcategotr = cotizacionFija || (() => {
     if (!vehicle.cversion || categoriasUso.length === 0) return false;
     const ver = versiones.find((v) => String(v.cversion) === String(vehicle.cversion));
     const target = ver?.ccategotr ?? vehicle.ccategotr;
@@ -913,6 +919,24 @@ export function VehicleStep() {
 
   return (
     <div className="animate-fade-in space-y-5">
+
+      {/* ── Emitir desde cotización: vehículo fijo y resultado de comparar el carnet ── */}
+      {cotizacionFija && (
+        <div className="rounded-2xl border border-indigo-100 bg-indigo-50/60 px-4 py-3 text-sm text-slate-700">
+          <p className="font-semibold text-slate-900">Datos fijos de la cotización</p>
+          <p className="mt-0.5">
+            Año, marca, modelo, versión y uso vienen de la cotización de SysIP y no se pueden cambiar aquí.
+          </p>
+        </div>
+      )}
+      {(avisoCotizacion || errorCotizacion) && (
+        <div role="alert" className="rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm text-amber-900 flex items-start gap-2.5">
+          <AlertTriangle size={16} className="shrink-0 mt-0.5 text-amber-500" />
+          <p>
+            {avisoCotizacion ?? `No se pudo leer la cotización (${errorCotizacion}). Revisa los datos del vehículo con la cotización.`}
+          </p>
+        </div>
+      )}
 
       {/* ── Banner OCR ────────────────────────────────────────────────────────── */}
       {hasOcr && (
