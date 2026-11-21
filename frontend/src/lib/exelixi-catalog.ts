@@ -15,6 +15,7 @@ import type { PersonData } from '../types';
 import { persistTarjetaMetadataCanal, resolveTipoPlacaForTarjetaFlow } from './rcv-tarjeta-flow';
 import { useWizardStore } from '../store/wizardStore';
 import { PERSON_FIELD_LIMITS } from './field-limits';
+import { conMarcaNeutra } from './marca';
 
 /**
  * Domicilio fiscal del RIF → campo Dirección (xavecalle CHAR(60)): corta en el último
@@ -404,7 +405,7 @@ export function getEmisionContinueUrl(): string {
     /* ignore */
   }
 
-  return `${base}/?${params.toString()}`;
+  return conMarcaNeutra(`${base}/?${params.toString()}`);
 }
 
 /** Avanza al módulo emisión en flujo Exélixi (bridge o redirect con ?flow=exelixi-catalog). */

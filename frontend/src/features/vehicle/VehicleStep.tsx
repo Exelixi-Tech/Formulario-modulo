@@ -25,6 +25,7 @@ import {
 import { isExelixiCatalogFlow } from '../../lib/exelixi-catalog';
 import { isCotizadorFlow } from '../../lib/cotizador-flow';
 import { isRcvLaMundialFlow } from '../../lib/product';
+import { esMarcaNeutra } from '../../lib/marca';
 import { applyOcrPersonRolesFromDocuments } from '../../lib/ocr-person-roles';
 import { TipoPlacaSelector } from '../../components/TipoPlacaSelector';
 import { placaMaxLength, placaPlaceholder, validatePlacaMessage } from '../../lib/placa-tipo';
@@ -416,7 +417,9 @@ export function VehicleStep() {
             if (data.inGeneralCatalog) {
               warnMarca(
                 'Marca sin tarifa binacional',
-                `"${ocrMarca}" está en catálogo La Mundial pero no habilitada para plan binacional (${y}). Selecciona otra marca del listado o solicita el alta a La Mundial.`,
+                esMarcaNeutra()
+                  ? `"${ocrMarca}" está en el catálogo pero no habilitada para plan binacional (${y}). Selecciona otra marca del listado o solicita el alta a soporte.`
+                  : `"${ocrMarca}" está en catálogo La Mundial pero no habilitada para plan binacional (${y}). Selecciona otra marca del listado o solicita el alta a La Mundial.`,
               );
               return;
             }
@@ -1334,7 +1337,9 @@ export function VehicleStep() {
                   anchor="veh-toneladas"
                   label="Toneladas totales *"
                   error={errors.toneladas}
-                  hint="Solo para categoría >12 TM. Si indica menos de 12, se usará 13 TM (regla La Mundial)."
+                  hint={esMarcaNeutra()
+                    ? 'Solo para categoría >12 TM. Si indica menos de 12, se usará 13 TM.'
+                    : 'Solo para categoría >12 TM. Si indica menos de 12, se usará 13 TM (regla La Mundial).'}
                 >
                   <Input
                     type="number"

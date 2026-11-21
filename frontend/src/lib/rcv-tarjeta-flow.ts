@@ -1,5 +1,6 @@
 import { useWizardStore } from '../store/wizardStore';
 import { persistFlowHandoff } from './flow-handoff';
+import { conMarcaNeutra } from './marca';
 
 /** Header para APIs sin nexus_token en flujo farmacia RCV. */
 export const TARJETA_FLOW_HEADER = 'X-Rcv-Tarjeta-Flow';
@@ -138,7 +139,7 @@ export function getEmisionContinueUrlForTarjeta(): string {
   const configured = import.meta.env.VITE_EMISION_CONTINUE_BASE as string | undefined;
   const base = (configured?.replace(/\/$/, '') || '/emision').replace(/\/$/, '');
   const params = new URLSearchParams({ product: getTarjetaProductId(), flujo: 'tarjeta', wizardStep: '4' });
-  return `${base}/?${params.toString()}`;
+  return conMarcaNeutra(`${base}/?${params.toString()}`);
 }
 
 /** Formulario → Emisión sin bridge (?sid=) ni nexus_token. */

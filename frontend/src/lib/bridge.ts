@@ -37,6 +37,7 @@ import { shouldUseTarjetaPublicApi, withTarjetaFlowQuery } from './rcv-tarjeta-f
 import { toast } from '../store/toastStore';
 import { persistFlowHandoff, readFlowHandoff, encodeFlowHandoff } from './flow-handoff';
 import { mergeExelixiWizardHandoff } from './exelixi-wizard-handoff';
+import { conMarcaNeutra } from './marca';
 
 /** Las ampliaciones del handoff (snapshot en sessionStorage, merge Exélixi, hidratación local) son solo de patrimoniales. */
 function isPatrimonialHandoff(state?: Record<string, unknown> | null): boolean {
@@ -425,7 +426,7 @@ function makeBridge(): BridgeAPI {
       }
     }
 
-    const targetUrl = `${emisionBase}/?${params.toString()}`;
+    const targetUrl = conMarcaNeutra(`${emisionBase}/?${params.toString()}`);
     setTimeout(() => {
       window.location.href = targetUrl;
     }, 600);
@@ -493,6 +494,7 @@ function makeBridge(): BridgeAPI {
         if (shouldUseTarjetaPublicApi()) {
           target = withTarjetaFlowQuery(target);
         }
+        target = conMarcaNeutra(target);
         setTimeout(() => { window.location.href = target; }, 900);
       }
       return out ?? { finished: true };
@@ -517,7 +519,7 @@ function makeBridge(): BridgeAPI {
         } catch {
           params.set('product', 'rcv');
         }
-        window.location.href = withTarjetaFlowQuery(`${emisionBase}/?${params.toString()}`);
+        window.location.href = conMarcaNeutra(withTarjetaFlowQuery(`${emisionBase}/?${params.toString()}`));
       }
       return { finished: true };
     }
@@ -587,7 +589,7 @@ function makeBridge(): BridgeAPI {
       if (r?.data?.url) {
         const url = new URL(r.data.url);
         url.searchParams.set('wizardStep', String(targetStep));
-        window.location.href = url.toString();
+        window.location.href = conMarcaNeutra(url.toString());
         return true;
       }
     } catch (e) {
