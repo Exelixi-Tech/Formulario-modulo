@@ -65,6 +65,7 @@ import type { FuneralPerson } from '../../types';
 import { shouldUseTarjetaPublicApi } from '../../lib/rcv-tarjeta-flow';
 import { syncTitularFromTomador } from '../../lib/funeral-sync';
 import { resolveOcrPersonRoles } from '../../lib/ocr-person-roles';
+import { errorNombreNoEsDato } from '../../lib/nombre-no-es-dato';
 import { TitularDistintoOcrAlert, TITULAR_SECTION_ANCHOR } from './TitularDistintoOcrAlert';
 
 /** Años cumplidos desde YYYY-MM-DD (calendario, sin UTC). */
@@ -836,6 +837,9 @@ export function EmissionStep() {
         e[`${prefix}nombre`] = 'El nombre debe tener al menos 2 caracteres';
       } else if (len(person.nombre) > PERSON_FIELD_LIMITS.nombre) {
         e[`${prefix}nombre`] = `El nombre no puede superar ${PERSON_FIELD_LIMITS.nombre} caracteres`;
+      } else if (!isJuridica && errorNombreNoEsDato(person.nombre, 'nombre')) {
+        // El OCR pudo precargar el sexo o un rótulo como nombre (foto girada): no se continúa así.
+        e[`${prefix}nombre`] = errorNombreNoEsDato(person.nombre, 'nombre')!;
       }
 
       if (isJuridicaRcv) {
@@ -846,6 +850,8 @@ export function EmissionStep() {
         e[`${prefix}apellido`] = 'El apellido debe tener al menos 2 caracteres';
       } else if (len(person.apellido) > PERSON_FIELD_LIMITS.apellido) {
         e[`${prefix}apellido`] = `El apellido no puede superar ${PERSON_FIELD_LIMITS.apellido} caracteres`;
+      } else if (!isJuridica && errorNombreNoEsDato(person.apellido, 'apellido')) {
+        e[`${prefix}apellido`] = errorNombreNoEsDato(person.apellido, 'apellido')!;
       }
 
       if (!isJuridica) {
