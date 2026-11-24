@@ -9,6 +9,7 @@ import { resolveOcrModelo, resolveOcrTipoPlaca, sanitizeOcrField } from './vehic
 import { normalizeMotorSerial, normalizeVehicleSerial } from './vehicle-serial';
 import { extractTomadorFromCertificado } from './carnet-propietario';
 import { applyOcrPersonRoles } from './ocr-person-roles';
+import { nombreDesdeOcr } from './nombre-no-es-dato';
 import { applyFuneralOcrCedulas } from './funeral-ocr-apply';
 import { toDiligenciaDocTypes, type DiligenciaDocType } from './diligencia';
 import type { PersonData } from '../types';
@@ -279,8 +280,11 @@ export function applyExelixiOcrHandoff(
     // RIF jurídico (J/G/C): nombre = razón social, sin apellido; dirección y estado del domicilio fiscal.
     const esPJ = ['J', 'G', 'C'].includes(String(cedula.tipoDoc ?? '').toUpperCase());
     setters.setTomador({
-      nombre: cedula.nombre ?? cedula.razonSocial ?? '',
-      apellido: esPJ ? '' : (cedula.apellido ?? ''),
+      // Persona natural: el sexo o un rótulo leído como nombre (foto girada) no se precarga.
+      nombre: esPJ
+        ? (cedula.nombre ?? cedula.razonSocial ?? '')
+        : nombreDesdeOcr(cedula.nombre ?? cedula.razonSocial ?? '', 'nombre'),
+      apellido: esPJ ? '' : nombreDesdeOcr(cedula.apellido ?? '', 'apellido'),
       identificacion: cedula.identificacion ?? '',
       tipoDoc: cedula.tipoDoc ?? 'V',
       fechaNac: cedula.fechaNacimiento ?? (esPJ ? (cedula.fechaInscripcion ?? '') : ''),
