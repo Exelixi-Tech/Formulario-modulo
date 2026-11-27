@@ -636,16 +636,24 @@ export function EmissionStep() {
         const res = await cedulaTienePolizaVigente(digits, polizaCramo);
         if (res.blocked) {
           lastFuneralOk.current[prefix] = false;
+          // 'tom_' solo llega aquí al continuar con el tomador marcado como asegurado:
+          // el aviso habla del asegurado y dice cómo seguir si esa persona solo paga.
+          const esTomadorComoTitular = prefix === 'tom_';
+          const pista = 'Si esta persona solo va a pagar, activa «¿La persona que pagará la Póliza es diferente a la que será asegurada?».';
           setErrors((prev) => ({
             ...prev,
-            [`${prefix}identificacion`]: res.message,
+            [`${prefix}identificacion`]: esTomadorComoTitular
+              ? `Como asegurada, esta persona ya tiene una ${polizaVigenteLabel(polizaCramo)}. ${pista}`
+              : res.message,
           }));
           toast.warning(
-            'No se puede asegurar',
-            res.cnpoliza
-              ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
-              : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
-            8000,
+            esTomadorComoTitular ? 'La persona asegurada ya tiene póliza' : 'No se puede asegurar',
+            esTomadorComoTitular
+              ? `Ya tiene una ${polizaVigenteLabel(polizaCramo)}${res.cnpoliza ? ` (${res.cnpoliza})` : ''}. ${pista}`
+              : res.cnpoliza
+                ? `Ya existe una ${polizaVigenteLabel(polizaCramo)} (${res.cnpoliza}).`
+                : `Esta cédula ya tiene una ${polizaVigenteLabel(polizaCramo)}. No se puede continuar.`,
+            esTomadorComoTitular ? 10000 : 8000,
           );
           return false;
         }
@@ -711,24 +719,17 @@ export function EmissionStep() {
     }
     const digits = String(tomador.identificacion || '').replace(/\D/g, '');
     if (digits.length < 6) return;
+    // Personas: no se valida póliza vigente mientras se escribe la cédula del tomador.
+    // Si el tomador también es el asegurado, se revisa al continuar (validate).
+    if (checkFuneralFlow) return;
     const timer = window.setTimeout(() => {
-      if (checkFuneralFlow) {
-        void runFuneralCedulaAuto(
-          'tom_',
-          tomador.tipoDoc ?? 'V',
-          tomador.identificacion,
-          tomador,
-          setTomador,
-        );
-      } else {
-        void lookupByCedula(
-          'tom_',
-          tomador.tipoDoc ?? 'V',
-          tomador.identificacion,
-          tomador,
-          setTomador,
-        );
-      }
+      void lookupByCedula(
+        'tom_',
+        tomador.tipoDoc ?? 'V',
+        tomador.identificacion,
+        tomador,
+        setTomador,
+      );
     }, 450);
     return () => window.clearTimeout(timer);
   }, [
@@ -1111,7 +1112,7 @@ export function EmissionStep() {
                   }
                   void lookupByCedula(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                 }
-              : checkFuneralFlow && !(prefix === 'tom_' && sameInsured === false)
+              : checkFuneralFlow && prefix !== 'tom_'
                 ? (id) => {
                     void runFuneralCedulaAuto(prefix, person.tipoDoc ?? 'V', id, person, setPerson);
                   }
